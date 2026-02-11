@@ -1,6 +1,7 @@
 FROM rust:1-bookworm AS builder
 WORKDIR /build
 COPY backend/ backend/
+COPY frontend/ frontend/
 WORKDIR /build/backend
 RUN cargo build --release -p news-server
 
