@@ -2187,3 +2187,295 @@ fn update_feed_enabled(db: &Db, feed_id: &str, enabled: bool) -> Result<(), Stri
     let updated = DynamicFeed { enabled, ..feed };
     db.put_feed(&updated)
 }
+
+// --- SEO / OGP per-domain ---
+
+struct SiteMeta {
+    _site_id: &'static str,
+    name: &'static str,
+    title: &'static str,
+    description: &'static str,
+    description_long: &'static str,
+    url: &'static str,
+    image: &'static str,
+    theme_color: &'static str,
+    lang: &'static str,
+    keywords: &'static str,
+}
+
+const SITE_METAS: &[SiteMeta] = &[
+    SiteMeta {
+        _site_id: "xyz",
+        name: "news.xyz",
+        title: "news.xyz - AI-Powered News",
+        description: "Smart news with AI-generated summaries, Q&A, and voice reading. The fastest AI news aggregator.",
+        description_long: "AI-Powered News Aggregator. Get the latest news across tech, business, entertainment, sports, and science with AI summaries, voice reading, and interactive Q&A.",
+        url: "https://news.xyz/",
+        image: "https://news.xyz/icons/icon-512.png",
+        theme_color: "#1a1a2e",
+        lang: "en",
+        keywords: "news,AI,artificial intelligence,news aggregator,AI summary,voice news,tech news,breaking news",
+    },
+    SiteMeta {
+        _site_id: "online",
+        name: "news.online",
+        title: "news.online - Voice News Feed",
+        description: "TikTok-style AI voice news feed. Swipe through the latest news with AI-generated podcast dialogues.",
+        description_long: "Voice News - TikTok-style AI voice news feed. Swipe through the latest news with AI-generated podcast dialogues and voice narration.",
+        url: "https://news.online/",
+        image: "https://news.online/icons/icon-512.png",
+        theme_color: "#000000",
+        lang: "en",
+        keywords: "voice news,AI podcast,news feed,TikTok news,audio news,AI narration,news online",
+    },
+    SiteMeta {
+        _site_id: "cloud",
+        name: "news.cloud",
+        title: "news.cloud - News API Platform",
+        description: "Developer-friendly news aggregation API. AI summaries, article search, podcast generation, and MCP support.",
+        description_long: "News API Platform for developers. Access AI-powered news aggregation, article search, AI summaries, podcast generation, and MCP integration via a simple REST API.",
+        url: "https://news.cloud/",
+        image: "https://news.cloud/icons/icon-512.png",
+        theme_color: "#0f172a",
+        lang: "en",
+        keywords: "news API,developer API,news aggregation,AI API,MCP,REST API,news data,news platform",
+    },
+    SiteMeta {
+        _site_id: "chatnews",
+        name: "ChatNews",
+        title: "ChatNews - Conversational AI News",
+        description: "Chat with AI about the latest news. Get summaries, deep dives, and answers in a conversational format.",
+        description_long: "Conversational AI News Experience. Chat with AI about the latest news, get instant summaries, deep-dive analysis, and answers to your questions.",
+        url: "https://chatnews.link/",
+        image: "https://chatnews.link/icons/icon-512.png",
+        theme_color: "#18181b",
+        lang: "en",
+        keywords: "chat news,AI chat,conversational news,news AI,chatbot news,AI assistant,news summary",
+    },
+    SiteMeta {
+        _site_id: "yournews",
+        name: "YourNews",
+        title: "YourNews - Personalized AI News",
+        description: "AI-curated news tailored to your interests. Your personalized news feed delivered daily.",
+        description_long: "Your Personalized AI News. AI curates and delivers news tailored to your interests with smart summaries and voice reading.",
+        url: "https://yournews.link/",
+        image: "https://yournews.link/icons/icon-512.png",
+        theme_color: "#0c0a09",
+        lang: "en",
+        keywords: "personalized news,AI curation,custom news feed,news for you,AI news,daily news,smart news",
+    },
+    SiteMeta {
+        _site_id: "velo",
+        name: "velo.tech",
+        title: "velo.tech - Web Speed Insights",
+        description: "Instant web performance measurement. Core Web Vitals, speed scores, and optimization suggestions in one click.",
+        description_long: "Web Speed Insights. Measure your website performance instantly with Core Web Vitals analysis, speed scores, and actionable optimization suggestions.",
+        url: "https://velo.tech/",
+        image: "https://velo.tech/icons/icon-512.png",
+        theme_color: "#020617",
+        lang: "en",
+        keywords: "web performance,Core Web Vitals,speed test,website speed,performance audit,web optimization",
+    },
+    SiteMeta {
+        _site_id: "claud",
+        name: "ClaudNews",
+        title: "ClaudNews - AI News by Claude",
+        description: "AI-powered news aggregator powered by Claude. Smart summaries, Q&A, and voice reading.",
+        description_long: "AI News by Claude. Get the latest news with AI-generated summaries, interactive Q&A, and voice reading powered by Claude.",
+        url: "https://news.claud/",
+        image: "https://news.claud/icons/icon-512.png",
+        theme_color: "#1c1917",
+        lang: "en",
+        keywords: "Claude AI,AI news,news summary,Claude news,AI aggregator,smart news",
+    },
+];
+
+fn detect_site(host: &str) -> &'static SiteMeta {
+    if host.contains("online") {
+        &SITE_METAS[1]
+    } else if host.contains("chatnews") {
+        &SITE_METAS[3]
+    } else if host.contains("yournews") {
+        &SITE_METAS[4]
+    } else if host.contains("velo") {
+        &SITE_METAS[5]
+    } else if host.contains(".cloud") {
+        &SITE_METAS[2]
+    } else if host.contains("claud") {
+        &SITE_METAS[6]
+    } else {
+        &SITE_METAS[0] // news.xyz default
+    }
+}
+
+/// Serve index.html with per-domain SEO/OGP meta tags injected server-side.
+/// This is critical because crawlers (Googlebot, Facebook, Twitter) do NOT execute JavaScript.
+/// Instead of fragile string replacements on the original template, we use placeholders.
+const INDEX_HTML_TEMPLATE: &str = include_str!("../../../../frontend/index.html");
+
+pub async fn serve_index_html(headers: HeaderMap) -> Response {
+    let host = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("news.xyz");
+
+    let site = detect_site(host);
+
+    // Build the <head> section with correct meta tags for this domain
+    let head_block = format!(
+r#"<head>
+  <script>(function(){{var h=location.hostname;var s='xyz';if(h.indexOf('online')!==-1)s='online';else if(h.indexOf('chatnews')!==-1)s='chatnews';else if(h.indexOf('yournews')!==-1)s='yournews';else if(h.indexOf('velo')!==-1)s='velo';else if(h.indexOf('.cloud')!==-1)s='cloud';else if(h.indexOf('claud')!==-1)s='claud';document.documentElement.dataset.site=s;}})()</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{description_long}">
+  <meta name="keywords" content="{keywords}">
+  <meta name="theme-color" content="{theme_color}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="{url}">
+  <!-- OGP -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{name}">
+  <meta property="og:title" content="{title}">
+  <meta property="og:description" content="{description}">
+  <meta property="og:url" content="{url}">
+  <meta property="og:image" content="{image}">
+  <meta property="og:locale" content="ja_JP">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{title}">
+  <meta name="twitter:description" content="{description}">
+  <meta name="twitter:image" content="{image}">
+  <title>{title}</title>"#,
+        description_long = site.description_long,
+        keywords = site.keywords,
+        theme_color = site.theme_color,
+        url = site.url,
+        name = site.name,
+        title = site.title,
+        description = site.description,
+        image = site.image,
+    );
+
+    // Replace the entire <head> block up to (but not including) the manifest link
+    // The template starts with: <!DOCTYPE html>\n<html lang="ja">\n<head>\n  ...  \n  <title>...</title>
+    // We replace from <head> through </title> line, then keep the rest (manifest, CSS, etc.)
+    let html_str = INDEX_HTML_TEMPLATE;
+
+    // Find the end of the <title> line to know where to splice
+    let title_end = html_str.find("</title>")
+        .map(|pos| {
+            // Find the end of the line containing </title>
+            html_str[pos..].find('\n').map(|nl| pos + nl + 1).unwrap_or(pos + 8)
+        })
+        .unwrap_or(0);
+
+    let head_start = html_str.find("<head>").unwrap_or(0);
+
+    let html = if title_end > head_start {
+        let lang_attr = format!("<html lang=\"{}\">", site.lang);
+        format!(
+            "<!DOCTYPE html>\n{}\n{}\n{}",
+            lang_attr,
+            head_block,
+            &html_str[title_end..]
+        )
+    } else {
+        // Fallback: serve the original template
+        html_str.to_string()
+    };
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .header(header::CACHE_CONTROL, "public, max-age=300")
+        .body(Body::from(html))
+        .unwrap()
+}
+
+/// Serve /robots.txt with a reference to the sitemap.
+pub async fn serve_robots_txt(headers: HeaderMap) -> Response {
+    let host = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("news.xyz");
+
+    let site = detect_site(host);
+
+    let body = format!(
+        "User-agent: *\n\
+         Allow: /\n\
+         \n\
+         Sitemap: {}sitemap.xml\n",
+        site.url
+    );
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+        .header(header::CACHE_CONTROL, "public, max-age=3600")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+/// Serve /sitemap.xml dynamically generated from articles in the database.
+pub async fn serve_sitemap_xml(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let host = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("news.xyz");
+
+    let site = detect_site(host);
+    let base_url = site.url.trim_end_matches('/');
+
+    let mut xml = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
+    );
+
+    // Homepage
+    xml.push_str(&format!(
+        "  <url>\n    <loc>{}/</loc>\n    <changefreq>hourly</changefreq>\n    <priority>1.0</priority>\n  </url>\n",
+        base_url
+    ));
+
+    // Static pages
+    for page in &["about.html", "settings.html"] {
+        xml.push_str(&format!(
+            "  <url>\n    <loc>{}/{}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.3</priority>\n  </url>\n",
+            base_url, page
+        ));
+    }
+
+    // Category pages
+    for cat in news_core::models::Category::all() {
+        xml.push_str(&format!(
+            "  <url>\n    <loc>{}/?category={}</loc>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>\n",
+            base_url, cat.as_str()
+        ));
+    }
+
+    // Recent articles (up to 200 for sitemap coverage)
+    if let Ok((articles, _)) = state.db.query_articles(None, 200, None) {
+        for article in &articles {
+            let lastmod = article.published_at.format("%Y-%m-%dT%H:%M:%S+00:00");
+            // Use article ID as the URL fragment/path for the detail view
+            let escaped_id = article.id.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+            xml.push_str(&format!(
+                "  <url>\n    <loc>{}/#article/{}</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
+                base_url, escaped_id, lastmod
+            ));
+        }
+    }
+
+    xml.push_str("</urlset>\n");
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/xml; charset=utf-8")
+        .header(header::CACHE_CONTROL, "public, max-age=600")
+        .body(Body::from(xml))
+        .unwrap()
+}

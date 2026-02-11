@@ -10,8 +10,8 @@ const Site = (() => {
   const config = {
     xyz: {
       name: 'news.xyz',
-      title: 'news.xyz - AI超高速ニュース',
-      description: 'AI搭載の超高速ニュースアグリゲーター。最新ニュースをAIが要約・質問応答・読み上げ。',
+      title: 'news.xyz - AI-Powered News',
+      description: 'Smart news with AI-generated summaries, Q&A, and voice reading. The fastest AI news aggregator.',
       url: 'https://news.xyz/',
       image: 'https://news.xyz/icons/icon-512.png',
       manifest: 'manifest.json',
@@ -19,8 +19,8 @@ const Site = (() => {
     },
     claud: {
       name: 'ClaudNews',
-      title: 'ClaudNews - AI超高速ニュース',
-      description: 'AI搭載の超高速ニュースアグリゲーター。最新ニュースをAIが要約・質問応答・読み上げ。',
+      title: 'ClaudNews - AI News by Claude',
+      description: 'AI-powered news aggregator powered by Claude. Smart summaries, Q&A, and voice reading.',
       url: 'https://news.claud/',
       image: 'https://news.claud/icons/icon-512.png',
       manifest: 'manifest-claud.json',
@@ -28,8 +28,8 @@ const Site = (() => {
     },
     online: {
       name: 'news.online',
-      title: 'news.online - AIニュースポッドキャスト',
-      description: 'AIが生成する対話型ニュースポッドキャスト。縦スワイプで最新ニュースを音声で楽しめる。',
+      title: 'news.online - Voice News Feed',
+      description: 'TikTok-style AI voice news feed. Swipe through the latest news with AI-generated podcast dialogues.',
       url: 'https://news.online/',
       image: 'https://news.online/icons/icon-512.png',
       manifest: 'manifest-online.json',
@@ -38,7 +38,7 @@ const Site = (() => {
     cloud: {
       name: 'news.cloud',
       title: 'news.cloud - News API Platform',
-      description: 'AIニュースAPI。記事検索・AI要約・ポッドキャスト生成・MCP対応。開発者向けニュースデータプラットフォーム。',
+      description: 'Developer-friendly news aggregation API. AI summaries, article search, podcast generation, and MCP support.',
       url: 'https://news.cloud/',
       image: 'https://news.cloud/icons/icon-512.png',
       manifest: 'manifest-cloud.json',
@@ -46,8 +46,8 @@ const Site = (() => {
     },
     chatnews: {
       name: 'ChatNews',
-      title: 'ChatNews - AIとニュースを語ろう',
-      description: 'AIとチャットしながらニュースを読む新体験。最新ニュースの要約・深掘り・質問をチャット形式で。',
+      title: 'ChatNews - Conversational AI News',
+      description: 'Chat with AI about the latest news. Get summaries, deep dives, and answers in a conversational format.',
       url: 'https://chatnews.link/',
       image: 'https://chatnews.link/icons/icon-512.png',
       manifest: 'manifest-chatnews.json',
@@ -55,8 +55,8 @@ const Site = (() => {
     },
     yournews: {
       name: 'YourNews',
-      title: 'YourNews - あなた専用AIニュース',
-      description: 'あなたの興味に合わせてAIがニュースをキュレーション。パーソナライズされたニュースフィードを毎日お届け。',
+      title: 'YourNews - Personalized AI News',
+      description: 'AI-curated news tailored to your interests. Your personalized news feed delivered daily.',
       url: 'https://yournews.link/',
       image: 'https://yournews.link/icons/icon-512.png',
       manifest: 'manifest-yournews.json',
@@ -65,7 +65,7 @@ const Site = (() => {
     velo: {
       name: 'velo.tech',
       title: 'velo.tech - Web Speed Insights',
-      description: 'Webサイトのパフォーマンスを瞬時に計測。Core Web Vitals、速度スコア、改善提案をワンクリックで。',
+      description: 'Instant web performance measurement. Core Web Vitals, speed scores, and optimization suggestions in one click.',
       url: 'https://velo.tech/',
       image: 'https://velo.tech/icons/icon-512.png',
       manifest: 'manifest-velo.json',

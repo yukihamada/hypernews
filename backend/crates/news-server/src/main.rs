@@ -146,6 +146,12 @@ async fn main() {
         .route("/api/usage", get(routes::handle_usage))
         // MCP server endpoint
         .route("/mcp", post(mcp::handle_mcp))
+        // SEO: server-side rendered index.html with per-domain OGP meta tags
+        .route("/", get(routes::serve_index_html))
+        .route("/index.html", get(routes::serve_index_html))
+        // SEO: sitemap and robots.txt
+        .route("/robots.txt", get(routes::serve_robots_txt))
+        .route("/sitemap.xml", get(routes::serve_sitemap_xml))
         .with_state(state);
 
     // CORS: restrict to known origins (same-origin requests + specific domains)
