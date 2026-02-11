@@ -5,7 +5,10 @@ mod mcp;
 mod routes;
 mod stripe;
 
+use axum::extract::Request;
 use axum::http::HeaderValue;
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Redirect};
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use db::Db;
@@ -150,6 +153,11 @@ async fn main() {
         .allow_origin(AllowOrigin::list([
             "https://news.xyz".parse::<HeaderValue>().unwrap(),
             "https://news.online".parse::<HeaderValue>().unwrap(),
+            "https://news.cloud".parse::<HeaderValue>().unwrap(),
+            "https://chatnews.link".parse::<HeaderValue>().unwrap(),
+            "https://chatnews.tech".parse::<HeaderValue>().unwrap(),
+            "https://yournews.link".parse::<HeaderValue>().unwrap(),
+            "https://velo.tech".parse::<HeaderValue>().unwrap(),
             "https://news.claud".parse::<HeaderValue>().unwrap(),
             "https://news-xyz.fly.dev".parse::<HeaderValue>().unwrap(),
             "https://news-online.fly.dev".parse::<HeaderValue>().unwrap(),
@@ -171,6 +179,7 @@ async fn main() {
 
     let app = api_routes
         .fallback_service(ServeDir::new(&static_dir).append_index_html_on_directories(true))
+        .layer(middleware::from_fn(redirect_chatnews_tech))
         .layer(ConcurrencyLimitLayer::new(256))
         .layer(CompressionLayer::new())
         .layer(cors)
@@ -202,6 +211,19 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Server error");
+}
+
+/// Redirect chatnews.tech → chatnews.link (301)
+async fn redirect_chatnews_tech(req: Request, next: Next) -> impl IntoResponse {
+    if let Some(host) = req.headers().get("host").and_then(|h| h.to_str().ok()) {
+        if host.contains("chatnews.tech") {
+            let uri = req.uri();
+            let path = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+            let target = format!("https://chatnews.link{}", path);
+            return Redirect::permanent(&target).into_response();
+        }
+    }
+    next.run(req).await.into_response()
 }
 
 async fn shutdown_signal() {

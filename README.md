@@ -1,11 +1,16 @@
-# HyperNews — AI ニュースポッドキャストプラットフォーム
+# HyperNews — AI ニュースプラットフォーム
 
-Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一バイナリ・同一 Docker イメージで **2 つのサイトを本番運用中**:
+Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一バイナリ・同一 Docker イメージで **7 つのドメインを運用**:
 
 | サイト | URL | 内容 |
 |--------|-----|------|
 | **news.xyz** | https://news.xyz | カード型ニュースサイト (3テーマ、チャット、TTS) |
-| **news.online** | https://news.online | TikTok風 縦スワイプ AI音声ニュース (Apple Liquid Glass デザイン) |
+| **news.online** | https://news.online | TikTok風 縦スワイプ AI音声ニュース (Apple Liquid Glass) |
+| **news.cloud** | https://news.cloud | ニュースAPI プラットフォーム (開発者向け) |
+| **chatnews.link** | https://chatnews.link | チャット型ニュース (AIとニュースを語る) |
+| **yournews.link** | https://yournews.link | パーソナライズドニュース (興味に合わせてキュレーション) |
+| **velo.tech** | https://velo.tech | Web速度計測ツール (Core Web Vitals) |
+| **chatnews.tech** | — | → chatnews.link へ301リダイレクト |
 
 > **余談**: いいサービスを思いついて勢いでドメインを取得したら、news.online が 453万円、news.xyz が 181万円、その他合わせて総額 **845万円** の請求が来た。まさかそんな値段だとは思わなかったが、後悔はしていない。
 
@@ -25,12 +30,13 @@ Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一�
 │  │  Background ──── RSS Fetcher (30分毎)       │  │
 │  └────────────────────────────────────────────┘  │
 │                                                   │
-│  news.xyz (fly.toml)   news.online (fly.online.toml) │
-│  └─ カード型 UI          └─ 縦スワイプ + AI音声   │
+│  news.xyz       news.online      news.cloud      │
+│  chatnews.link  yournews.link    velo.tech       │
+│  chatnews.tech → chatnews.link (301 redirect)    │
 └─────────────────────────────────────────────────┘
 ```
 
-**ドメイン判別**: フロントエンドの `location.hostname` で `online` / `claud` / `xyz` を判定し、`data-site` 属性でUIを切り替え。バックエンドは共通。
+**ドメイン判別**: フロントエンドの `location.hostname` で `online` / `chatnews` / `yournews` / `velo` / `cloud` / `claud` / `xyz` を判定し、`data-site` 属性でUIを切り替え。バックエンドは共通。`chatnews.tech` はバックエンドミドルウェアで `chatnews.link` へ301リダイレクト。
 
 ---
 
@@ -62,15 +68,23 @@ hypernews/
 │   ├── css/
 │   │   ├── base.css            # 共通スタイル
 │   │   ├── feed.css            # ★ news.online用 (Apple Liquid Glass)
+│   │   ├── cloud.css           # news.cloud API プラットフォーム
+│   │   ├── chatnews.css        # chatnews.link チャット型
+│   │   ├── yournews.css        # yournews.link パーソナライズ
+│   │   ├── velo.css            # velo.tech 速度計測
 │   │   ├── theme-card.css      # news.xyz カードテーマ
 │   │   ├── theme-hacker.css    # news.xyz ハッカーテーマ
 │   │   ├── theme-lite.css      # news.xyz ライトテーマ
 │   │   └── site-claud.css      # claud テーマ
 │   ├── js/
-│   │   ├── app.js              # アプリ初期化 (online → FeedApp に分岐)
-│   │   ├── feed.js             # ★ 縦スワイプフィードコントローラー
+│   │   ├── app.js              # アプリ初期化 (ドメイン別に分岐)
+│   │   ├── feed.js             # ★ news.online 縦スワイプフィード
 │   │   ├── feed-player.js      # ★ ポッドキャスト再生モジュール
 │   │   ├── feed-voice.js       # ★ 音声認識コマンド
+│   │   ├── cloud.js            # news.cloud API ドキュメント
+│   │   ├── chatnews.js         # chatnews.link チャットUI
+│   │   ├── yournews.js         # yournews.link パーソナライズ
+│   │   ├── velo.js             # velo.tech 速度計測
 │   │   ├── site.js             # サイトブランディング設定
 │   │   ├── api.js              # API クライアント
 │   │   ├── renderer.js         # 記事レンダリング
@@ -84,11 +98,19 @@ hypernews/
 │   ├── sw.js                   # Service Worker
 │   ├── manifest.json           # PWA (news.xyz)
 │   ├── manifest-online.json    # PWA (news.online)
-│   └── manifest-claud.json     # PWA (claud)
+│   ├── manifest-claud.json     # PWA (claud)
+│   ├── manifest-cloud.json     # PWA (news.cloud)
+│   ├── manifest-chatnews.json  # PWA (chatnews.link)
+│   ├── manifest-yournews.json  # PWA (yournews.link)
+│   └── manifest-velo.json      # PWA (velo.tech)
 │
 ├── Dockerfile                  # マルチステージビルド
 ├── fly.toml                    # Fly.io設定 (news.xyz)
 ├── fly.online.toml             # Fly.io設定 (news.online)
+├── fly.cloud.toml              # Fly.io設定 (news.cloud)
+├── fly.chatnews.toml           # Fly.io設定 (chatnews.link)
+├── fly.yournews.toml           # Fly.io設定 (yournews.link)
+├── fly.velo.toml               # Fly.io設定 (velo.tech)
 └── deploy-fly.sh               # デプロイスクリプト
 ```
 
@@ -125,16 +147,28 @@ cargo run -p news-server
 open http://localhost:8080
 ```
 
-### news.online モードで確認する方法
+### 各ドメインのUIをローカルで確認する方法
 
-ローカルでは hostname が `localhost` なので、DevTools のコンソールで以下を実行:
+ローカルでは hostname が `localhost` なので、DevTools のコンソールで `data-site` を切り替え:
 
 ```javascript
-document.documentElement.dataset.site = 'online';
-location.reload();
+// news.online (縦スワイプフィード)
+document.documentElement.dataset.site = 'online'; location.reload();
+
+// news.cloud (API プラットフォーム)
+document.documentElement.dataset.site = 'cloud'; location.reload();
+
+// chatnews.link (チャット型ニュース)
+document.documentElement.dataset.site = 'chatnews'; location.reload();
+
+// yournews.link (パーソナライズ)
+document.documentElement.dataset.site = 'yournews'; location.reload();
+
+// velo.tech (速度計測)
+document.documentElement.dataset.site = 'velo'; location.reload();
 ```
 
-または Chrome DevTools → Settings → Devices で `news.online` を `localhost:8080` にマッピング。
+または Chrome DevTools → Settings → Devices でドメインを `localhost:8080` にマッピング。
 
 ---
 
@@ -243,23 +277,23 @@ fly auth login
 ### デプロイ手順
 
 ```bash
-# news.xyz をデプロイ
-fly deploy -c fly.toml
-
-# news.online をデプロイ (同じDockerイメージ)
-fly deploy -c fly.online.toml
+# 各サイトをデプロイ (同じDockerイメージ)
+fly deploy -c fly.toml            # news.xyz
+fly deploy -c fly.online.toml     # news.online
+fly deploy -c fly.cloud.toml      # news.cloud
+fly deploy -c fly.chatnews.toml   # chatnews.link + chatnews.tech
+fly deploy -c fly.yournews.toml   # yournews.link
+fly deploy -c fly.velo.toml       # velo.tech
 ```
 
 ### シークレット設定
 
 ```bash
-# news.xyz
-fly secrets set ANTHROPIC_API_KEY=sk-ant-... -a news-xyz
-fly secrets set OPENAI_API_KEY=sk-... -a news-xyz
-
-# news.online
-fly secrets set ANTHROPIC_API_KEY=sk-ant-... -a news-online
-fly secrets set OPENAI_API_KEY=sk-... -a news-online
+# 各アプリに共通のシークレットを設定
+for app in news-xyz news-online news-cloud chatnews yournews velo-tech; do
+  fly secrets set ANTHROPIC_API_KEY=sk-ant-... -a $app
+  fly secrets set OPENAI_API_KEY=sk-... -a $app
+done
 ```
 
 ### Fly.io 構成
@@ -310,7 +344,7 @@ docker run -p 8080:8080 \
 
 - フレームワークなし、Vanilla JS + CSS
 - 各 `.js` は IIFE パターンでグローバル名前空間にモジュール公開 (`const FeedApp = (() => { ... })()`)
-- `data-site` 属性で `online` のとき feed.css/feed.js/feed-player.js/feed-voice.js を条件読み込み
+- `data-site` 属性でドメイン別CSS/JSを条件読み込み（`online`→feed系、`cloud`→cloud系、`chatnews`→chatnews系、`yournews`→yournews系、`velo`→velo系）
 
 ### news.online の音声機能
 
@@ -327,7 +361,7 @@ docker run -p 8080:8080 \
 | `cargo build` でリンクエラー | `rustup default stable` で stable ツールチェインを確認 |
 | ポッドキャスト生成されない | `ANTHROPIC_API_KEY` と `OPENAI_API_KEY` を確認 |
 | RSS が取得されない | `feeds.toml` の URL が正しいか確認。起動後30分待つ |
-| news.online の UI が出ない | hostname に `online` が含まれているか確認 (DevTools で `data-site` を確認) |
+| 特定ドメインの UI が出ない | hostname が正しく判定されているか確認 (DevTools で `document.documentElement.dataset.site` を確認) |
 | SQLite locked | 同時に複数プロセスがDBにアクセスしていないか確認 |
 
 ---

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <script>(function(){var h=location.hostname;var s=h.indexOf('online')!==-1?'online':h.indexOf('claud')!==-1?'claud':'xyz';document.documentElement.dataset.site=s;})()</script>
+  <script>(function(){var h=location.hostname;var s='xyz';if(h.indexOf('online')!==-1)s='online';else if(h.indexOf('chatnews')!==-1)s='chatnews';else if(h.indexOf('yournews')!==-1)s='yournews';else if(h.indexOf('velo')!==-1)s='velo';else if(h.indexOf('.cloud')!==-1)s='cloud';else if(h.indexOf('claud')!==-1)s='claud';document.documentElement.dataset.site=s;})()</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="AI搭載の超高速ニュースアグリゲーター。総合・テクノロジー・ビジネス・エンタメ・スポーツ・サイエンス・ポッドキャストの最新ニュースを爆速配信。AIによる要約・質問応答・読み上げ機能付き。">
@@ -40,7 +40,7 @@
   <link rel="stylesheet" href="css/theme-card.css?v=16">
   <link rel="stylesheet" href="css/theme-lite.css?v=16">
   <link rel="stylesheet" href="css/chat.css?v=16">
-  <script>if(document.documentElement.dataset.site==='online'){document.write('<link rel="stylesheet" href="css/feed.css?v=16">')}</script>
+  <script>(function(){var s=document.documentElement.dataset.site,w=document.write.bind(document);if(s==='online')w('<link rel="stylesheet" href="css/feed.css?v=17">');else if(s==='cloud')w('<link rel="stylesheet" href="css/cloud.css?v=1">');else if(s==='chatnews')w('<link rel="stylesheet" href="css/chatnews.css?v=1">');else if(s==='yournews')w('<link rel="stylesheet" href="css/yournews.css?v=1">');else if(s==='velo')w('<link rel="stylesheet" href="css/velo.css?v=1">');})()</script>
 </head>
 <body data-theme="card" data-mode="light">
 
@@ -139,7 +139,7 @@
   <script src="js/commands.js?v=16"></script>
   <script src="js/chat.js?v=16"></script>
   <script src="js/app.js?v=16"></script>
-  <script>if(document.documentElement.dataset.site==='online'){document.write('<script src="js/feed.js?v=16"><\/script><script src="js/feed-player.js?v=16"><\/script><script src="js/feed-voice.js?v=16"><\/script>')}</script>
+  <script>(function(){var s=document.documentElement.dataset.site,w=document.write.bind(document);if(s==='online')w('<script src="js/feed.js?v=17"><\/script><script src="js/feed-player.js?v=17"><\/script><script src="js/feed-voice.js?v=17"><\/script>');else if(s==='cloud')w('<script src="js/cloud.js?v=1"><\/script>');else if(s==='chatnews')w('<script src="js/chatnews.js?v=1"><\/script>');else if(s==='yournews')w('<script src="js/yournews.js?v=1"><\/script>');else if(s==='velo')w('<script src="js/velo.js?v=1"><\/script>');})()</script>
   <script src="js/sw-register.js?v=16"></script>
 </body>
 </html>

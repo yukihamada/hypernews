@@ -35,6 +35,42 @@ const Site = (() => {
       manifest: 'manifest-online.json',
       themeColor: '#000000',
     },
+    cloud: {
+      name: 'news.cloud',
+      title: 'news.cloud - News API Platform',
+      description: 'AIニュースAPI。記事検索・AI要約・ポッドキャスト生成・MCP対応。開発者向けニュースデータプラットフォーム。',
+      url: 'https://news.cloud/',
+      image: 'https://news.cloud/icons/icon-512.png',
+      manifest: 'manifest-cloud.json',
+      themeColor: '#0f172a',
+    },
+    chatnews: {
+      name: 'ChatNews',
+      title: 'ChatNews - AIとニュースを語ろう',
+      description: 'AIとチャットしながらニュースを読む新体験。最新ニュースの要約・深掘り・質問をチャット形式で。',
+      url: 'https://chatnews.link/',
+      image: 'https://chatnews.link/icons/icon-512.png',
+      manifest: 'manifest-chatnews.json',
+      themeColor: '#18181b',
+    },
+    yournews: {
+      name: 'YourNews',
+      title: 'YourNews - あなた専用AIニュース',
+      description: 'あなたの興味に合わせてAIがニュースをキュレーション。パーソナライズされたニュースフィードを毎日お届け。',
+      url: 'https://yournews.link/',
+      image: 'https://yournews.link/icons/icon-512.png',
+      manifest: 'manifest-yournews.json',
+      themeColor: '#0c0a09',
+    },
+    velo: {
+      name: 'velo.tech',
+      title: 'velo.tech - Web Speed Insights',
+      description: 'Webサイトのパフォーマンスを瞬時に計測。Core Web Vitals、速度スコア、改善提案をワンクリックで。',
+      url: 'https://velo.tech/',
+      image: 'https://velo.tech/icons/icon-512.png',
+      manifest: 'manifest-velo.json',
+      themeColor: '#020617',
+    },
   };
 
   const c = config[siteId] || config.xyz;

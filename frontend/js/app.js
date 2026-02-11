@@ -19,10 +19,14 @@ const App = (() => {
   const els = {};
 
   function init() {
-    // Branch to feed UI for online site
-    if (typeof Site !== 'undefined' && Site.id === 'online' && typeof FeedApp !== 'undefined') {
-      FeedApp.init();
-      return;
+    // Branch to dedicated UI for each site
+    if (typeof Site !== 'undefined') {
+      const s = Site.id;
+      if (s === 'online' && typeof FeedApp !== 'undefined') { FeedApp.init(); return; }
+      if (s === 'cloud' && typeof CloudApp !== 'undefined') { CloudApp.init(); return; }
+      if (s === 'chatnews' && typeof ChatNewsApp !== 'undefined') { ChatNewsApp.init(); return; }
+      if (s === 'yournews' && typeof YourNewsApp !== 'undefined') { YourNewsApp.init(); return; }
+      if (s === 'velo' && typeof VeloApp !== 'undefined') { VeloApp.init(); return; }
     }
 
     els.articles = document.getElementById('articles');

@@ -3,7 +3,7 @@
  * v16: Expanded cache, offline improvements, settings/about pages cached
  */
 
-const CACHE_NAME = 'hypernews-v16';
+const CACHE_NAME = 'hypernews-v17';
 const API_CACHE = 'hypernews-api-v1';
 const IMG_CACHE = 'hypernews-img-v1';
 const API_MAX_ENTRIES = 500;
@@ -40,10 +40,22 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/manifest-claud.json',
   '/manifest-online.json',
-  '/css/feed.css?v=16',
-  '/js/feed.js?v=16',
-  '/js/feed-player.js?v=16',
-  '/js/feed-voice.js?v=16',
+  '/manifest-cloud.json',
+  '/manifest-chatnews.json',
+  '/manifest-yournews.json',
+  '/manifest-velo.json',
+  '/css/feed.css?v=17',
+  '/js/feed.js?v=17',
+  '/js/feed-player.js?v=17',
+  '/js/feed-voice.js?v=17',
+  '/css/cloud.css?v=1',
+  '/js/cloud.js?v=1',
+  '/css/chatnews.css?v=1',
+  '/js/chatnews.js?v=1',
+  '/css/yournews.css?v=1',
+  '/js/yournews.js?v=1',
+  '/css/velo.css?v=1',
+  '/js/velo.js?v=1',
 ];
 
 // Install: precache static assets
