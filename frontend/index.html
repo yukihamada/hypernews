@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <script>(function(){var h=location.hostname;var s=h.indexOf('online')!==-1?'online':h.indexOf('claud')!==-1?'claud':'xyz';document.documentElement.dataset.site=s;})()</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI搭載の超高速ニュースアグリゲーター。総合・テクノロジー・ビジネス・エンタメ・スポーツ・サイエンス・ポッドキャストの最新ニュースを爆速配信。AIによる要約・質問応答・読み上げ機能付き。">
+  <meta name="keywords" content="ニュース,news,AI,速報,テクノロジー,ビジネス,スポーツ,エンタメ,サイエンス,ポッドキャスト,要約,読み上げ">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://news.xyz/">
+  <!-- OGP -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="news.xyz">
+  <meta property="og:title" content="news.xyz - AI超高速ニュース">
+  <meta property="og:description" content="AI搭載の超高速ニュースアグリゲーター。最新ニュースをAIが要約・質問応答・読み上げ。">
+  <meta property="og:url" content="https://news.xyz/">
+  <meta property="og:image" content="https://news.xyz/icons/icon-512.png">
+  <meta property="og:locale" content="ja_JP">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="news.xyz - AI超高速ニュース">
+  <meta name="twitter:description" content="AI搭載の超高速ニュースアグリゲーター。最新ニュースをAIが要約・質問応答・読み上げ。">
+  <meta name="twitter:image" content="https://news.xyz/icons/icon-512.png">
+  <title>news.xyz - AI超高速ニュース</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    /* Critical inline CSS for first paint */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);transition:background .2s,color .2s}
+    :root{--bg:#ffffff;--text:#0f172a;--surface:#f8f9fa;--border:#e8ecf0;--accent:#3b82f6;--accent-hover:#2563eb;--muted:#64748b;--font-size:16px;--radius:12px}
+    [data-mode="dark"]{--bg:#0f172a;--text:#e2e8f0;--surface:#1e293b;--border:#334155;--accent:#60a5fa;--accent-hover:#93c5fd;--muted:#94a3b8}
+    .loading{display:flex;justify-content:center;padding:2rem;color:var(--muted)}
+  </style>
+  <link rel="stylesheet" href="css/base.css?v=16">
+  <link rel="stylesheet" href="css/site-claud.css?v=16">
+  <link rel="stylesheet" href="css/theme-hacker.css?v=16">
+  <link rel="stylesheet" href="css/theme-card.css?v=16">
+  <link rel="stylesheet" href="css/theme-lite.css?v=16">
+  <link rel="stylesheet" href="css/chat.css?v=16">
+  <script>if(document.documentElement.dataset.site==='online'){document.write('<link rel="stylesheet" href="css/feed.css?v=16">')}</script>
+</head>
+<body data-theme="card" data-mode="light">
+
+  <a href="#articles" class="skip-link">記事へスキップ</a>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <h1 class="logo">news.xyz</h1>
+      <nav class="category-nav" id="category-nav" role="navigation" aria-label="カテゴリ">
+        <button class="cat-btn active" data-category="">すべて</button>
+      </nav>
+      <a href="/settings.html" class="header-link" id="settings-link" aria-label="設定" title="設定">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </a>
+      <a href="/about.html" class="header-link" id="about-link" aria-label="About" title="About">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      </a>
+      <button class="mode-toggle" id="mode-toggle" aria-label="ダーク/ライトモード切替" title="モード切替">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+      <button class="chat-toggle" id="chat-toggle" aria-label="設定チャットを開く" title="設定">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="main" id="main">
+    <div class="articles" id="articles">
+      <div class="loading" id="loading">読み込み中...</div>
+    </div>
+    <div id="scroll-sentinel" style="height:1px"></div>
+    <div class="load-more-wrap" id="load-more-wrap" style="display:none">
+      <button class="load-more-btn" id="load-more-btn">もっと読む</button>
+    </div>
+  </main>
+
+  <!-- Article detail panel -->
+  <div class="detail-overlay" id="detail-overlay" hidden></div>
+  <aside class="detail-panel" id="detail-panel" hidden>
+    <div class="detail-header">
+      <button class="detail-back" id="detail-back" aria-label="戻る">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      </button>
+      <span class="detail-header-title">記事詳細</span>
+      <button class="detail-share" id="detail-share" aria-label="シェア" title="シェア">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </button>
+      <a class="detail-external" id="detail-external" href="#" target="_blank" rel="noopener" aria-label="元記事を開く">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    </div>
+    <div class="detail-body" id="detail-body">
+      <div class="detail-img-wrap" id="detail-img-wrap"></div>
+      <h2 class="detail-title" id="detail-title"></h2>
+      <div class="detail-meta" id="detail-meta"></div>
+      <p class="detail-desc" id="detail-desc"></p>
+      <div class="detail-ai-section">
+        <h3 class="detail-ai-heading">AI Q&A</h3>
+        <div class="detail-questions" id="detail-questions">
+          <div class="detail-loading">質問を生成中...</div>
+        </div>
+        <div class="detail-answers" id="detail-answers"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Chat panel -->
+  <aside class="chat-panel" id="chat-panel" aria-label="設定チャット" hidden>
+    <div class="chat-header">
+      <span>設定アシスタント</span>
+      <button class="chat-close" id="chat-close" aria-label="閉じる">&times;</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg bot">こんにちは！表示をカスタマイズできます。「ヘルプ」と入力してコマンド一覧を確認してください。</div>
+    </div>
+    <div class="chat-suggestions" id="chat-suggestions"></div>
+    <form class="chat-input-form" id="chat-form">
+      <input class="chat-input" id="chat-input" type="text" placeholder="例: ダークモードにして" autocomplete="off">
+      <button class="chat-send" type="submit" aria-label="送信">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </form>
+  </aside>
+
+  <script src="js/storage.js?v=16"></script>
+  <script src="js/site.js?v=16"></script>
+  <script src="js/ab.js?v=16"></script>
+  <script src="js/subscription.js?v=16"></script>
+  <script src="js/api.js?v=16"></script>
+  <script src="js/theme.js?v=16"></script>
+  <script src="js/renderer.js?v=16"></script>
+  <script src="js/tts.js?v=16"></script>
+  <script src="js/commands.js?v=16"></script>
+  <script src="js/chat.js?v=16"></script>
+  <script src="js/app.js?v=16"></script>
+  <script>if(document.documentElement.dataset.site==='online'){document.write('<script src="js/feed.js?v=16"><\/script><script src="js/feed-player.js?v=16"><\/script><script src="js/feed-voice.js?v=16"><\/script>')}</script>
+  <script src="js/sw-register.js?v=16"></script>
+</body>
+</html>

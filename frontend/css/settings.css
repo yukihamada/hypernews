@@ -1,0 +1,132 @@
+/* settings.css — Settings page styles */
+
+/* Header */
+.settings-header{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+[data-mode="dark"] .settings-header{background:rgba(15,23,42,0.85)}
+.settings-header-inner{max-width:900px;margin:0 auto;padding:0.75rem 1.5rem;display:flex;align-items:center;gap:1rem}
+.settings-logo{font-size:1.2rem;font-weight:700;color:var(--accent);text-decoration:none}
+.settings-title{flex:1;font-size:1.1rem;font-weight:600}
+.settings-back{color:var(--accent);text-decoration:none;font-size:0.9rem}
+.settings-back:hover{text-decoration:underline}
+
+/* Main */
+.settings-main{max-width:900px;margin:0 auto;padding:1.5rem}
+
+/* Tabs */
+.settings-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1.5rem;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.settings-tabs::-webkit-scrollbar{display:none}
+.tab-btn{padding:0.75rem 1.25rem;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-size:0.95rem;color:var(--muted);font-weight:500;white-space:nowrap;transition:color .2s,border-color .2s;min-height:44px}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* Tab panels */
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.tab-panel h2{font-size:1.3rem;margin-bottom:1.25rem;font-weight:600}
+
+/* Admin auth */
+.admin-auth{margin-bottom:1rem}
+
+/* Feeds list */
+.feeds-list{display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.5rem;max-height:400px;overflow-y:auto}
+.feed-item{display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.feed-info{flex:1;min-width:0}
+.feed-source{font-weight:600;font-size:0.95rem}
+.feed-url{font-size:0.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-category{font-size:0.75rem;color:var(--accent);background:rgba(59,130,246,0.08);padding:2px 8px;border-radius:4px;white-space:nowrap}
+.feed-toggle{width:40px;height:22px;border-radius:11px;border:none;cursor:pointer;position:relative;transition:background .2s;min-width:40px}
+.feed-toggle.on{background:var(--accent)}
+.feed-toggle.off{background:var(--border)}
+.feed-toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+.feed-toggle.on::after{transform:translateX(18px)}
+.feed-delete{background:none;border:none;color:#ef5350;cursor:pointer;font-size:1.2rem;padding:0.25rem;opacity:0.7;transition:opacity .2s;min-width:24px;min-height:44px;display:flex;align-items:center;justify-content:center}
+.feed-delete:hover{opacity:1}
+.loading-text{color:var(--muted);padding:1rem;text-align:center}
+
+/* Add feed form */
+.feed-add-form{padding:1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.feed-add-form h3{font-size:1rem;margin-bottom:0.75rem}
+.form-row{display:flex;gap:0.5rem;flex-wrap:wrap}
+.form-input,.form-select{padding:0.6rem 0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:0.9rem;flex:1;min-width:120px;min-height:44px}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
+.btn-add{padding:0.6rem 1.25rem;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap;transition:opacity .2s;min-height:44px}
+.btn-add:hover{opacity:0.85}
+
+/* Data management */
+.data-cards{display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1.5rem}
+.data-card{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.data-info{display:flex;flex-direction:column;gap:0.25rem}
+.data-info strong{font-size:0.95rem}
+.data-info span{font-size:0.85rem;color:var(--muted)}
+.btn-danger{padding:0.5rem 1rem;background:#ef5350;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;transition:opacity .2s;min-height:44px}
+.btn-danger:hover{opacity:0.85}
+.data-summary{padding:1rem;color:var(--muted);font-size:0.9rem}
+
+/* Setting groups */
+.setting-group{margin-bottom:1.5rem}
+.setting-group label{display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.95rem}
+
+/* Button groups */
+.btn-group{display:flex;gap:0.5rem;flex-wrap:wrap}
+.opt-btn{padding:0.5rem 1rem;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;font-size:0.9rem;transition:border-color .2s,background .2s;min-height:44px}
+.opt-btn:hover{border-color:var(--accent)}
+.opt-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Color grid */
+.color-grid{display:flex;gap:0.5rem;flex-wrap:wrap}
+.color-btn{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:border-color .2s,transform .2s}
+.color-btn:hover{transform:scale(1.1)}
+.color-btn.active{border-color:var(--text);transform:scale(1.15)}
+
+/* Range */
+.form-range{width:100%;max-width:400px;accent-color:var(--accent)}
+
+/* Textarea */
+.form-textarea{width:100%;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:0.9rem;font-family:inherit;resize:vertical;min-height:80px}
+.form-hint{display:block;margin-top:0.25rem;font-size:0.8rem;color:var(--muted)}
+
+/* AI actions */
+.ai-actions{display:flex;gap:0.75rem;margin-top:1rem}
+.btn-primary{padding:0.6rem 1.5rem;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:opacity .2s;min-height:44px}
+.btn-primary:hover{opacity:0.85}
+.btn-secondary{padding:0.6rem 1.5rem;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;cursor:pointer;font-weight:600;transition:background .2s;min-height:44px}
+.btn-secondary:hover{background:rgba(59,130,246,0.08)}
+
+/* Toggle switch component */
+.toggle-group{display:flex;align-items:center;justify-content:space-between;padding:0.75rem 0;border-bottom:1px solid var(--border)}
+.toggle-group label{margin-bottom:0}
+.toggle-switch{background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center}
+.toggle-track{width:44px;height:24px;border-radius:12px;background:var(--border);position:relative;transition:background .2s}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,0.15)}
+.toggle-switch[aria-checked="true"] .toggle-track{background:var(--accent)}
+.toggle-switch[aria-checked="true"] .toggle-thumb{transform:translateX(20px)}
+
+/* Slider (range) enhancements */
+.form-range{height:6px;-webkit-appearance:none;appearance:none;background:var(--border);border-radius:3px;outline:none}
+.form-range::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.form-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+
+/* Toast notification */
+.toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);padding:0.75rem 1.5rem;background:#333;color:#fff;border-radius:var(--radius);font-size:0.9rem;z-index:9999;animation:fadeInUp .3s ease}
+@keyframes fadeInUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ===== Responsive — Tablet ===== */
+@media(max-width:768px){
+  .settings-main{padding:1rem}
+  .settings-header-inner{padding:0.75rem 1rem}
+  .tab-btn{padding:0.6rem 1rem;font-size:0.9rem}
+}
+
+/* ===== Responsive — Mobile ===== */
+@media(max-width:480px){
+  .settings-main{padding:0.75rem 0.5rem}
+  .settings-header-inner{padding:0.5rem 0.75rem}
+  .settings-title{font-size:1rem}
+  .form-row{flex-direction:column}
+  .form-input,.form-select{min-width:0;width:100%}
+  .data-card{flex-direction:column;align-items:flex-start;gap:0.75rem}
+  .btn-danger{align-self:flex-end}
+  .ai-actions{flex-direction:column}
+  .btn-primary,.btn-secondary{width:100%;text-align:center}
+  .feed-item{flex-wrap:wrap}
+}

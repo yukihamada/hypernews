@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - HyperNews</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#ffffff;--text:#0f172a;--surface:#f8f9fa;--border:#e8ecf0;--accent:#3b82f6;--accent-hover:#2563eb;--muted:#64748b;--radius:12px}
+    [data-mode="dark"]{--bg:#0f172a;--text:#e2e8f0;--surface:#1e293b;--border:#334155;--muted:#94a3b8}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);transition:background .2s,color .2s}
+  </style>
+  <link rel="stylesheet" href="css/settings.css?v=17">
+</head>
+<body data-mode="light">
+
+  <header class="settings-header">
+    <div class="settings-header-inner">
+      <a href="/" class="settings-logo">news.xyz</a>
+      <h1 class="settings-title">Settings</h1>
+      <a href="/" class="settings-back">Home</a>
+    </div>
+  </header>
+
+  <main class="settings-main">
+    <nav class="settings-tabs" id="settings-tabs">
+      <button class="tab-btn active" data-tab="feeds">RSS Feeds</button>
+      <button class="tab-btn" data-tab="display">Display</button>
+      <button class="tab-btn" data-tab="reading">Reading</button>
+      <button class="tab-btn" data-tab="ai">AI & Voice</button>
+      <button class="tab-btn" data-tab="local">Local Data</button>
+    </nav>
+
+    <!-- Tab 1: RSS Feeds -->
+    <section class="tab-panel active" id="tab-feeds">
+      <h2>RSS Feed Management</h2>
+      <div class="admin-auth" id="admin-auth">
+        <div class="form-row">
+          <input type="password" id="admin-secret" placeholder="Admin Secret (for add/delete/toggle)" class="form-input" style="flex:1">
+          <button class="btn-secondary" id="admin-save-btn">Save</button>
+        </div>
+      </div>
+      <div class="feeds-list" id="feeds-list">
+        <div class="loading-text">Loading feeds...</div>
+      </div>
+      <div class="feed-add-form">
+        <h3>Add New Feed</h3>
+        <div class="form-row">
+          <input type="url" id="feed-url" placeholder="Feed URL" class="form-input">
+          <input type="text" id="feed-source" placeholder="Source Name" class="form-input">
+          <select id="feed-category" class="form-select">
+            <option value="general">General</option>
+            <option value="tech">Technology</option>
+            <option value="business">Business</option>
+            <option value="entertainment">Entertainment</option>
+            <option value="sports">Sports</option>
+            <option value="science">Science</option>
+            <option value="podcast">Podcast</option>
+          </select>
+          <button class="btn-add" id="feed-add-btn">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Local Data -->
+    <section class="tab-panel" id="tab-local">
+      <h2>Local Data Management</h2>
+      <div class="data-cards">
+        <div class="data-card">
+          <div class="data-info">
+            <strong>Read History</strong>
+            <span id="history-count">0 articles</span>
+          </div>
+          <button class="btn-danger" id="clear-history">Clear</button>
+        </div>
+        <div class="data-card">
+          <div class="data-info">
+            <strong>Bookmarks</strong>
+            <span id="bookmark-count">0 items</span>
+          </div>
+          <button class="btn-danger" id="clear-bookmarks">Clear</button>
+        </div>
+        <div class="data-card">
+          <div class="data-info">
+            <strong>AI Cache (EcoSystem)</strong>
+            <span id="cache-count">0 entries</span>
+          </div>
+          <button class="btn-danger" id="clear-cache">Clear</button>
+        </div>
+        <div class="data-card">
+          <div class="data-info">
+            <strong>All Settings</strong>
+            <span>Reset to defaults</span>
+          </div>
+          <button class="btn-danger" id="clear-all">Reset All</button>
+        </div>
+      </div>
+      <div class="data-summary">
+        <p>Total localStorage usage: <strong id="storage-size">0 KB</strong></p>
+      </div>
+    </section>
+
+    <!-- Tab 3: Display -->
+    <section class="tab-panel" id="tab-display">
+      <h2>Display Settings</h2>
+
+      <div class="setting-group">
+        <label>Theme</label>
+        <div class="btn-group" id="theme-btns">
+          <button class="opt-btn" data-value="hacker">Hacker</button>
+          <button class="opt-btn" data-value="card">Card</button>
+          <button class="opt-btn" data-value="lite">Lite</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Mode</label>
+        <div class="btn-group" id="mode-btns">
+          <button class="opt-btn" data-value="light">Light</button>
+          <button class="opt-btn" data-value="dark">Dark</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Font Size: <span id="font-size-val">16px</span></label>
+        <input type="range" id="font-size-range" min="12" max="24" step="2" value="16" class="form-range">
+      </div>
+
+      <div class="setting-group">
+        <label>Layout Density</label>
+        <div class="btn-group" id="density-btns">
+          <button class="opt-btn" data-value="compact">Compact</button>
+          <button class="opt-btn" data-value="normal">Normal</button>
+          <button class="opt-btn" data-value="spacious">Spacious</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Accent Color</label>
+        <div class="color-grid" id="color-btns">
+          <button class="color-btn" data-value="default" style="background:#4fc3f7" title="Default"></button>
+          <button class="color-btn" data-value="blue" style="background:#42a5f5" title="Blue"></button>
+          <button class="color-btn" data-value="green" style="background:#66bb6a" title="Green"></button>
+          <button class="color-btn" data-value="purple" style="background:#ab47bc" title="Purple"></button>
+          <button class="color-btn" data-value="red" style="background:#ef5350" title="Red"></button>
+          <button class="color-btn" data-value="orange" style="background:#ffa726" title="Orange"></button>
+          <button class="color-btn" data-value="pink" style="background:#ec407a" title="Pink"></button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Auto Refresh</label>
+        <div class="btn-group" id="refresh-btns">
+          <button class="opt-btn" data-value="0">OFF</button>
+          <button class="opt-btn" data-value="1">1 min</button>
+          <button class="opt-btn" data-value="5">5 min</button>
+          <button class="opt-btn" data-value="15">15 min</button>
+        </div>
+      </div>
+
+      <div class="setting-group toggle-group">
+        <label>Show Images</label>
+        <button class="toggle-switch" id="toggle-showImages" role="switch" aria-checked="true">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </button>
+      </div>
+
+      <div class="setting-group toggle-group">
+        <label>Show Description</label>
+        <button class="toggle-switch" id="toggle-showDescriptions" role="switch" aria-checked="true">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </button>
+      </div>
+
+      <div class="setting-group toggle-group">
+        <label>Hide Read Articles</label>
+        <button class="toggle-switch" id="toggle-hideReadArticles" role="switch" aria-checked="false">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </button>
+      </div>
+
+      <div class="setting-group toggle-group">
+        <label>Animations</label>
+        <button class="toggle-switch" id="toggle-enableAnimations" role="switch" aria-checked="true">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Tab: Reading -->
+    <section class="tab-panel" id="tab-reading">
+      <h2>Reading Settings</h2>
+
+      <div class="setting-group">
+        <label>Articles Per Page</label>
+        <div class="btn-group" id="articles-per-page-btns">
+          <button class="opt-btn" data-value="20">20</button>
+          <button class="opt-btn" data-value="30">30</button>
+          <button class="opt-btn" data-value="50">50</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Read Mark Timing</label>
+        <div class="btn-group" id="read-mark-btns">
+          <button class="opt-btn" data-value="0">Instant</button>
+          <button class="opt-btn" data-value="1000">1s</button>
+          <button class="opt-btn" data-value="1500">1.5s</button>
+          <button class="opt-btn" data-value="2000">2s</button>
+          <button class="opt-btn" data-value="3000">3s</button>
+          <button class="opt-btn" data-value="-1">OFF</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Article Click Action</label>
+        <div class="btn-group" id="click-action-btns">
+          <button class="opt-btn" data-value="detail">Detail Panel</button>
+          <button class="opt-btn" data-value="newtab">New Tab</button>
+        </div>
+      </div>
+
+      <div class="setting-group toggle-group">
+        <label>Infinite Scroll</label>
+        <button class="toggle-switch" id="toggle-infiniteScroll" role="switch" aria-checked="true">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Tab: AI & Voice -->
+    <section class="tab-panel" id="tab-ai">
+      <h2>AI & Voice Settings</h2>
+
+      <div class="setting-group">
+        <label for="ai-question-prompt">Custom Prompt (Question Generation)</label>
+        <textarea id="ai-question-prompt" class="form-textarea" rows="4" placeholder="質問生成時の追加指示...&#10;例: 経済的な影響に焦点を当てて質問を生成してください"></textarea>
+        <small class="form-hint">記事の質問生成時にAIへの追加指示として使われます</small>
+      </div>
+
+      <div class="setting-group">
+        <label for="ai-answer-prompt">Custom Prompt (Answer Generation)</label>
+        <textarea id="ai-answer-prompt" class="form-textarea" rows="4" placeholder="AI回答生成時の追加指示...&#10;例: 初心者向けにわかりやすく説明してください"></textarea>
+        <small class="form-hint">記事への回答生成時にAIへの追加指示として使われます</small>
+      </div>
+
+      <div class="ai-actions">
+        <button class="btn-primary" id="ai-save-btn">Save Prompts</button>
+        <button class="btn-secondary" id="ai-clear-btn">Clear Prompts</button>
+      </div>
+
+      <div class="setting-group" style="margin-top:1.5rem">
+        <label>Typewriter Speed</label>
+        <div class="btn-group" id="typewriter-btns">
+          <button class="opt-btn" data-value="10">Fast</button>
+          <button class="opt-btn" data-value="20">Normal</button>
+          <button class="opt-btn" data-value="40">Slow</button>
+          <button class="opt-btn" data-value="0">OFF</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>TTS Voice</label>
+        <div class="btn-group" id="tts-voice-btns">
+          <button class="opt-btn active" data-value="off">OFF</button>
+        </div>
+        <small class="form-hint" id="tts-voice-hint">Loading voices...</small>
+      </div>
+
+      <div class="setting-group">
+        <label>EcoSystem Cache Rate: <span id="cache-rate-val">20%</span></label>
+        <input type="range" id="cache-rate-range" min="0" max="99" step="1" value="20" class="form-range">
+        <small class="form-hint">Lower = more eco points per query, higher = faster cached responses</small>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/storage.js?v=17"></script>
+  <script src="js/settings.js?v=17"></script>
+</body>
+</html>

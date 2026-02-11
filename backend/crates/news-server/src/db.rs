@@ -1,0 +1,926 @@
+use chrono::{DateTime, Utc};
+use news_core::changes::{AdminAction, ChangeRequest, ChangeStatus};
+use news_core::config::{DynamicFeed, FeatureFlags, ServiceConfig};
+use news_core::models::{Article, Category};
+use rusqlite::{params, Connection};
+use std::sync::Mutex;
+use tracing::info;
+
+pub struct Db {
+    conn: Mutex<Connection>,
+}
+
+impl Db {
+    pub fn open(path: &str) -> Result<Self, String> {
+        let conn = Connection::open(path).map_err(|e| format!("SQLite open: {e}"))?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA busy_timeout=5000;
+             PRAGMA synchronous=NORMAL;
+             PRAGMA foreign_keys=ON;",
+        )
+        .map_err(|e| format!("SQLite pragma: {e}"))?;
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS articles (
+                id TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                description TEXT,
+                image_url TEXT,
+                source TEXT NOT NULL,
+                published_at TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                group_id TEXT,
+                group_count INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
+                ON articles(category, published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_pub
+                ON articles(published_at DESC);
+
+            CREATE TABLE IF NOT EXISTS feeds (
+                feed_id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                source TEXT NOT NULL,
+                category TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                added_by TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS features (
+                feature TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                extra_json TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS changes (
+                change_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                command_text TEXT NOT NULL,
+                interpretation TEXT NOT NULL DEFAULT '',
+                actions_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS categories (
+                id TEXT PRIMARY KEY,
+                label_ja TEXT NOT NULL,
+                label_en TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                visible INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                api_token TEXT PRIMARY KEY,
+                stripe_customer_id TEXT NOT NULL,
+                stripe_subscription_id TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'active',
+                current_period_end TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_subs_stripe_sub_id
+                ON subscriptions(stripe_subscription_id);
+            CREATE INDEX IF NOT EXISTS idx_subs_stripe_cust_id
+                ON subscriptions(stripe_customer_id);
+
+            CREATE TABLE IF NOT EXISTS usage_limits (
+                device_id TEXT NOT NULL,
+                feature TEXT NOT NULL,
+                used_date TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device_id, feature, used_date)
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_cache (
+                cache_key TEXT PRIMARY KEY,
+                endpoint TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_cache_expires
+                ON ai_cache(expires_at);",
+        )
+        .map_err(|e| format!("SQLite schema: {e}"))?;
+
+        info!(path, "SQLite database opened");
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    // --- Articles ---
+
+    pub fn insert_article(&self, article: &Article) -> Result<bool, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO articles
+                (id, category, title, url, description, image_url, source, published_at, fetched_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                article.id,
+                article.category.as_str(),
+                article.title,
+                article.url,
+                article.description,
+                article.image_url,
+                article.source,
+                article.published_at.to_rfc3339(),
+                article.fetched_at.to_rfc3339(),
+            ],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("Insert article: {e}")),
+        }
+    }
+
+    pub fn insert_articles(&self, articles: &[Article]) -> Result<usize, String> {
+        let mut inserted = 0;
+        for a in articles {
+            if self.insert_article(a)? {
+                inserted += 1;
+            }
+        }
+        Ok(inserted)
+    }
+
+    pub fn update_image_url(&self, article_id: &str, image_url: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE articles SET image_url = ?1 WHERE id = ?2",
+            params![image_url, article_id],
+        )
+        .map_err(|e| format!("Update image: {e}"))?;
+        Ok(())
+    }
+
+    pub fn query_articles(
+        &self,
+        category: Option<&Category>,
+        limit: i64,
+        cursor: Option<&str>,
+    ) -> Result<(Vec<Article>, Option<String>), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let (cursor_pub, cursor_id) = match cursor {
+            Some(c) => decode_cursor(c).unwrap_or((String::new(), String::new())),
+            None => (String::new(), String::new()),
+        };
+        let has_cursor = !cursor_pub.is_empty();
+        let fetch_limit = limit + 1;
+
+        // Build SQL dynamically to avoid borrow issues
+        let mut conditions = Vec::new();
+        if category.is_some() {
+            conditions.push("category = :cat");
+        }
+        if has_cursor {
+            conditions.push("(published_at < :cpub OR (published_at = :cpub AND id < :cid))");
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT id, category, title, url, description, image_url, source,
+                    published_at, fetched_at, group_id, group_count
+             FROM articles {}
+             ORDER BY published_at DESC, id DESC
+             LIMIT :lim",
+            where_clause
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+        let cat_str = category.map(|c| c.as_str().to_string());
+        let mut idx = 0;
+        let mut param_names: Vec<&str> = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(ref cat) = cat_str {
+            param_names.push(":cat");
+            param_values.push(Box::new(cat.clone()));
+            idx += 1;
+        }
+        if has_cursor {
+            param_names.push(":cpub");
+            param_values.push(Box::new(cursor_pub.clone()));
+            param_names.push(":cid");
+            param_values.push(Box::new(cursor_id.clone()));
+            idx += 2;
+        }
+        param_names.push(":lim");
+        param_values.push(Box::new(fetch_limit));
+        let _ = idx;
+
+        let params: Vec<(&str, &dyn rusqlite::types::ToSql)> = param_names
+            .iter()
+            .zip(param_values.iter())
+            .map(|(name, val)| (*name, val.as_ref()))
+            .collect();
+
+        let rows = stmt
+            .query_map(params.as_slice(), row_to_article)
+            .map_err(|e| e.to_string())?;
+        let mut articles: Vec<Article> = rows.filter_map(|r| r.ok()).collect();
+
+        let next_cursor = if articles.len() as i64 > limit {
+            articles.truncate(limit as usize);
+            articles.last().map(|a| encode_cursor(a))
+        } else {
+            None
+        };
+
+        Ok((articles, next_cursor))
+    }
+
+    pub fn articles_without_image(&self, limit: i64) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles WHERE image_url IS NULL
+                 ORDER BY published_at DESC LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let articles = stmt
+            .query_map(params![limit], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(articles)
+    }
+
+    pub fn delete_old_articles(&self, before: &DateTime<Utc>) -> Result<usize, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM articles WHERE published_at < ?1",
+                params![before.to_rfc3339()],
+            )
+            .map_err(|e| format!("Delete old: {e}"))?;
+        Ok(deleted)
+    }
+
+    // --- Feeds ---
+
+    pub fn get_enabled_feeds(&self) -> Result<Vec<DynamicFeed>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT feed_id, url, source, category, enabled, added_by FROM feeds WHERE enabled = 1")
+            .map_err(|e| e.to_string())?;
+        let feeds = stmt
+            .query_map([], |row| {
+                Ok(DynamicFeed {
+                    feed_id: row.get(0)?,
+                    url: row.get(1)?,
+                    source: row.get(2)?,
+                    category: row.get(3)?,
+                    enabled: row.get::<_, i32>(4)? != 0,
+                    added_by: row.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(feeds)
+    }
+
+    pub fn get_all_feeds(&self) -> Result<Vec<DynamicFeed>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT feed_id, url, source, category, enabled, added_by FROM feeds")
+            .map_err(|e| e.to_string())?;
+        let feeds = stmt
+            .query_map([], |row| {
+                Ok(DynamicFeed {
+                    feed_id: row.get(0)?,
+                    url: row.get(1)?,
+                    source: row.get(2)?,
+                    category: row.get(3)?,
+                    enabled: row.get::<_, i32>(4)? != 0,
+                    added_by: row.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(feeds)
+    }
+
+    pub fn put_feed(&self, feed: &DynamicFeed) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO feeds (feed_id, url, source, category, enabled, added_by)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                feed.feed_id,
+                feed.url,
+                feed.source,
+                feed.category,
+                feed.enabled as i32,
+                feed.added_by,
+            ],
+        )
+        .map_err(|e| format!("Put feed: {e}"))?;
+        info!(feed_id = %feed.feed_id, source = %feed.source, "Feed saved");
+        Ok(())
+    }
+
+    pub fn delete_feed(&self, feed_id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM feeds WHERE feed_id = ?1", params![feed_id])
+            .map_err(|e| format!("Delete feed: {e}"))?;
+        info!(feed_id, "Feed deleted");
+        Ok(())
+    }
+
+    pub fn feed_count(&self) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row("SELECT COUNT(*) FROM feeds", [], |row| row.get(0))
+            .map_err(|e| format!("Feed count: {e}"))
+    }
+
+    // --- Features ---
+
+    pub fn get_feature_flags(&self) -> Result<FeatureFlags, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut flags = FeatureFlags::default();
+
+        let mut stmt = conn
+            .prepare("SELECT feature, enabled, extra_json FROM features")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i32>(1)? != 0,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        for row in rows.flatten() {
+            let (feature, enabled, extra) = row;
+            match feature.as_str() {
+                "grouping" => {
+                    flags.grouping_enabled = enabled;
+                    if let Some(ref json) = extra {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(json) {
+                            if let Some(t) = v.get("similarity_threshold").and_then(|t| t.as_f64())
+                            {
+                                flags.grouping_threshold = t;
+                            }
+                        }
+                    }
+                }
+                "ogp_enrichment" => {
+                    flags.ogp_enrichment_enabled = enabled;
+                }
+                _ => {}
+            }
+        }
+        Ok(flags)
+    }
+
+    pub fn get_service_config(&self) -> Result<ServiceConfig, String> {
+        let feeds = self.get_all_feeds()?;
+        let features = self.get_feature_flags()?;
+        Ok(ServiceConfig { feeds, features })
+    }
+
+    pub fn set_feature_flag(
+        &self,
+        feature: &str,
+        enabled: bool,
+        extra_json: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO features (feature, enabled, extra_json) VALUES (?1, ?2, ?3)",
+            params![feature, enabled as i32, extra_json],
+        )
+        .map_err(|e| format!("Set feature: {e}"))?;
+        info!(feature, enabled, "Feature flag updated");
+        Ok(())
+    }
+
+    // --- Categories ---
+
+    pub fn category_count(&self) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))
+            .map_err(|e| format!("Category count: {e}"))
+    }
+
+    pub fn seed_default_categories(&self) -> Result<(), String> {
+        let defaults = [
+            ("general", "総合", "General", 0),
+            ("tech", "テクノロジー", "Technology", 1),
+            ("business", "ビジネス", "Business", 2),
+            ("entertainment", "エンタメ", "Entertainment", 3),
+            ("sports", "スポーツ", "Sports", 4),
+            ("science", "サイエンス", "Science", 5),
+            ("podcast", "ポッドキャスト", "Podcast", 6),
+        ];
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        for (id, ja, en, order) in defaults {
+            conn.execute(
+                "INSERT OR IGNORE INTO categories (id, label_ja, label_en, sort_order, visible) VALUES (?1, ?2, ?3, ?4, 1)",
+                params![id, ja, en, order],
+            ).map_err(|e| format!("Seed category: {e}"))?;
+        }
+        info!("Default categories seeded");
+        Ok(())
+    }
+
+    pub fn ensure_all_categories_visible(&self) -> Result<usize, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let updated = conn
+            .execute("UPDATE categories SET visible = 1 WHERE visible = 0", [])
+            .map_err(|e| format!("Ensure visible: {e}"))?;
+        if updated > 0 {
+            info!(updated, "Made hidden categories visible");
+        }
+        Ok(updated)
+    }
+
+    pub fn get_categories(&self) -> Result<Vec<(String, String, String, i32, bool)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT id, label_ja, label_en, sort_order, visible FROM categories ORDER BY sort_order ASC, id ASC")
+            .map_err(|e| e.to_string())?;
+        let cats = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i32>(3)?,
+                    row.get::<_, i32>(4)? != 0,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(cats)
+    }
+
+    pub fn put_category(&self, id: &str, label_ja: &str, label_en: &str, sort_order: i32) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO categories (id, label_ja, label_en, sort_order, visible) VALUES (?1, ?2, ?3, ?4, 1)",
+            params![id, label_ja, label_en, sort_order],
+        ).map_err(|e| format!("Put category: {e}"))?;
+        info!(id, label_ja, "Category saved");
+        Ok(())
+    }
+
+    pub fn rename_category(&self, id: &str, label_ja: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let affected = conn.execute(
+            "UPDATE categories SET label_ja = ?1 WHERE id = ?2",
+            params![label_ja, id],
+        ).map_err(|e| format!("Rename category: {e}"))?;
+        if affected == 0 {
+            return Err(format!("Category not found: {}", id));
+        }
+        info!(id, label_ja, "Category renamed");
+        Ok(())
+    }
+
+    pub fn delete_category(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM categories WHERE id = ?1", params![id])
+            .map_err(|e| format!("Delete category: {e}"))?;
+        info!(id, "Category deleted");
+        Ok(())
+    }
+
+    pub fn reorder_categories(&self, order: &[String]) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        for (i, id) in order.iter().enumerate() {
+            conn.execute(
+                "UPDATE categories SET sort_order = ?1 WHERE id = ?2",
+                params![i as i32, id],
+            ).map_err(|e| format!("Reorder category: {e}"))?;
+        }
+        info!(count = order.len(), "Categories reordered");
+        Ok(())
+    }
+
+    // --- Changes ---
+
+    pub fn create_change(&self, change: &ChangeRequest) -> Result<(), String> {
+        let actions_json =
+            serde_json::to_string(&change.actions).map_err(|e| format!("Serialize actions: {e}"))?;
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO changes (change_id, status, command_text, interpretation, actions_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                change.change_id,
+                change.status.as_str(),
+                change.command_text,
+                change.interpretation,
+                actions_json,
+                change.created_at,
+            ],
+        )
+        .map_err(|e| format!("Create change: {e}"))?;
+        info!(change_id = %change.change_id, "Change request created");
+        Ok(())
+    }
+
+    pub fn get_change(&self, change_id: &str) -> Result<Option<ChangeRequest>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT change_id, status, command_text, interpretation, actions_json, created_at
+                 FROM changes WHERE change_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row(params![change_id], |row| {
+                let status_str: String = row.get(1)?;
+                let actions_json: String = row.get(4)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    status_str,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    actions_json,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .ok();
+
+        match result {
+            Some((change_id, status_str, command_text, interpretation, actions_json, created_at)) => {
+                let status = ChangeStatus::from_str(&status_str).unwrap_or(ChangeStatus::Pending);
+                let actions: Vec<AdminAction> =
+                    serde_json::from_str(&actions_json).unwrap_or_default();
+                Ok(Some(ChangeRequest {
+                    change_id,
+                    status,
+                    command_text,
+                    interpretation,
+                    actions,
+                    preview_config: None,
+                    created_at,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn update_change_status(
+        &self,
+        change_id: &str,
+        status: ChangeStatus,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE changes SET status = ?1 WHERE change_id = ?2",
+            params![status.as_str(), change_id],
+        )
+        .map_err(|e| format!("Update change status: {e}"))?;
+        info!(change_id, status = status.as_str(), "Change status updated");
+        Ok(())
+    }
+
+    // --- Subscriptions ---
+
+    pub fn create_subscription(
+        &self,
+        api_token: &str,
+        stripe_customer_id: &str,
+        stripe_subscription_id: &str,
+        current_period_end: &str,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO subscriptions
+                (api_token, stripe_customer_id, stripe_subscription_id, status, current_period_end, created_at)
+             VALUES (?1, ?2, ?3, 'active', ?4, ?5)",
+            params![
+                api_token,
+                stripe_customer_id,
+                stripe_subscription_id,
+                current_period_end,
+                chrono::Utc::now().to_rfc3339(),
+            ],
+        )
+        .map_err(|e| format!("Create subscription: {e}"))?;
+        info!(stripe_subscription_id, "Subscription created");
+        Ok(())
+    }
+
+    pub fn get_subscription_by_token(
+        &self,
+        api_token: &str,
+    ) -> Result<Option<(String, String, String, String)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT stripe_customer_id, stripe_subscription_id, status, current_period_end
+                 FROM subscriptions WHERE api_token = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row(params![api_token], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .ok();
+        Ok(result)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_subscription_by_stripe_id(
+        &self,
+        stripe_subscription_id: &str,
+    ) -> Result<Option<(String, String, String)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT api_token, status, current_period_end
+                 FROM subscriptions WHERE stripe_subscription_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row(params![stripe_subscription_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .ok();
+        Ok(result)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_subscription_by_customer_id(
+        &self,
+        stripe_customer_id: &str,
+    ) -> Result<Option<(String, String, String, String)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT api_token, stripe_subscription_id, status, current_period_end
+                 FROM subscriptions WHERE stripe_customer_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_row(params![stripe_customer_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .ok();
+        Ok(result)
+    }
+
+    pub fn update_subscription_status(
+        &self,
+        stripe_subscription_id: &str,
+        status: &str,
+        current_period_end: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        if let Some(period_end) = current_period_end {
+            conn.execute(
+                "UPDATE subscriptions SET status = ?1, current_period_end = ?2 WHERE stripe_subscription_id = ?3",
+                params![status, period_end, stripe_subscription_id],
+            )
+        } else {
+            conn.execute(
+                "UPDATE subscriptions SET status = ?1 WHERE stripe_subscription_id = ?2",
+                params![status, stripe_subscription_id],
+            )
+        }
+        .map_err(|e| format!("Update subscription: {e}"))?;
+        info!(stripe_subscription_id, status, "Subscription status updated");
+        Ok(())
+    }
+
+    // --- Usage Limits ---
+
+    pub fn increment_usage(&self, device_id: &str, feature: &str) -> Result<i64, String> {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO usage_limits (device_id, feature, used_date, count)
+             VALUES (?1, ?2, ?3, 1)
+             ON CONFLICT(device_id, feature, used_date)
+             DO UPDATE SET count = count + 1",
+            params![device_id, feature, today],
+        )
+        .map_err(|e| format!("Increment usage: {e}"))?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT count FROM usage_limits WHERE device_id = ?1 AND feature = ?2 AND used_date = ?3",
+                params![device_id, feature, today],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Get usage count: {e}"))?;
+        Ok(count)
+    }
+
+    pub fn get_usage(&self, device_id: &str, feature: &str) -> Result<i64, String> {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count = conn
+            .query_row(
+                "SELECT count FROM usage_limits WHERE device_id = ?1 AND feature = ?2 AND used_date = ?3",
+                params![device_id, feature, today],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+        Ok(count)
+    }
+
+    pub fn get_all_usage(&self, device_id: &str) -> Result<Vec<(String, i64)>, String> {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT feature, count FROM usage_limits WHERE device_id = ?1 AND used_date = ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![device_id, today], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn cleanup_old_usage(&self, days_to_keep: i64) -> Result<usize, String> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(days_to_keep))
+            .format("%Y-%m-%d")
+            .to_string();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM usage_limits WHERE used_date < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| format!("Cleanup usage: {e}"))?;
+        Ok(deleted)
+    }
+
+    pub fn list_changes(&self, limit: i64) -> Result<Vec<ChangeRequest>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT change_id, status, command_text, interpretation, actions_json, created_at
+                 FROM changes ORDER BY created_at DESC LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let changes = stmt
+            .query_map(params![limit], |row| {
+                let status_str: String = row.get(1)?;
+                let actions_json: String = row.get(4)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    status_str,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    actions_json,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .map(
+                |(change_id, status_str, command_text, interpretation, actions_json, created_at)| {
+                    let status =
+                        ChangeStatus::from_str(&status_str).unwrap_or(ChangeStatus::Pending);
+                    let actions: Vec<AdminAction> =
+                        serde_json::from_str(&actions_json).unwrap_or_default();
+                    ChangeRequest {
+                        change_id,
+                        status,
+                        command_text,
+                        interpretation,
+                        actions,
+                        preview_config: None,
+                        created_at,
+                    }
+                },
+            )
+            .collect();
+        Ok(changes)
+    }
+
+    // --- AI Cache ---
+
+    pub fn get_cache(&self, cache_key: &str) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut stmt = conn
+            .prepare(
+                "SELECT response_json FROM ai_cache WHERE cache_key = ?1 AND expires_at > ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let result: Option<String> = stmt
+            .query_row(params![cache_key, now], |row| row.get(0))
+            .ok();
+        Ok(result)
+    }
+
+    pub fn set_cache(
+        &self,
+        cache_key: &str,
+        endpoint: &str,
+        response_json: &str,
+        ttl_secs: i64,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now();
+        let expires = now + chrono::Duration::seconds(ttl_secs);
+        conn.execute(
+            "INSERT OR REPLACE INTO ai_cache (cache_key, endpoint, response_json, created_at, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                cache_key,
+                endpoint,
+                response_json,
+                now.to_rfc3339(),
+                expires.to_rfc3339()
+            ],
+        )
+        .map_err(|e| format!("Set cache: {e}"))?;
+        Ok(())
+    }
+
+    pub fn cleanup_expired_cache(&self) -> Result<usize, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let deleted = conn
+            .execute("DELETE FROM ai_cache WHERE expires_at < ?1", params![now])
+            .map_err(|e| format!("Cleanup cache: {e}"))?;
+        Ok(deleted)
+    }
+}
+
+fn row_to_article(row: &rusqlite::Row) -> rusqlite::Result<Article> {
+    let cat_str: String = row.get(1)?;
+    let category = Category::from_str(&cat_str).unwrap_or(Category::General);
+    let pub_str: String = row.get(7)?;
+    let fetch_str: String = row.get(8)?;
+    let published_at: DateTime<Utc> = pub_str.parse().unwrap_or_default();
+    let fetched_at: DateTime<Utc> = fetch_str.parse().unwrap_or_default();
+
+    Ok(Article {
+        id: row.get(0)?,
+        category,
+        title: row.get(2)?,
+        url: row.get(3)?,
+        description: row.get(4)?,
+        image_url: row.get(5)?,
+        source: row.get(6)?,
+        published_at,
+        fetched_at,
+        group_id: row.get(9)?,
+        group_count: row.get(10)?,
+    })
+}
+
+fn encode_cursor(article: &Article) -> String {
+    use base64::Engine;
+    let json = serde_json::json!({
+        "p": article.published_at.to_rfc3339(),
+        "i": article.id,
+    });
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json.to_string().as_bytes())
+}
+
+fn decode_cursor(cursor: &str) -> Option<(String, String)> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(cursor)
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let p = v.get("p")?.as_str()?.to_string();
+    let i = v.get("i")?.as_str()?.to_string();
+    Some((p, i))
+}

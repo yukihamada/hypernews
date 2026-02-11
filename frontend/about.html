@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="HyperNews - AI搭載のグローバルニュースアグリゲーター。世界中の最新ニュースをAIが要約・質問応答・読み上げ。">
+  <title>About - HyperNews</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/about.css?v=16">
+</head>
+<body>
+
+  <header class="about-header">
+    <div class="about-header-inner">
+      <a href="/" class="about-logo">news.xyz</a>
+      <nav class="about-nav">
+        <a href="/">Home</a>
+        <a href="/settings.html">Settings</a>
+        <a href="/about.html" class="active">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-title">HyperNews</h1>
+      <p class="hero-subtitle">AI-Powered Global News Platform</p>
+      <p class="hero-desc">
+        世界中の100以上のニュースソースから最新情報をリアルタイムで収集。<br>
+        AIによる要約・質問応答・音声読み上げで、ニュースの新しい体験を。
+      </p>
+      <div class="hero-actions">
+        <a href="/" class="btn-primary">Start Reading</a>
+        <a href="/settings.html" class="btn-secondary">Settings</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <h2 class="section-title">Features</h2>
+    <div class="feature-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <h3>Global RSS Aggregation</h3>
+        <p>Reuters, BBC, CNN, AP News, NHK, 朝日新聞 など100以上の国際フィードから7カテゴリの最新ニュースを自動収集。</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>AI Q&A</h3>
+        <p>記事についてAIに質問。Claude Sonnetが背景情報や多角的な視点を交えて回答。質問も自動生成。</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎙️</div>
+        <h3>News Summary & TTS</h3>
+        <p>AIがニュースキャスター風の要約原稿を作成。6つのTTSプロバイダ対応で自然な音声読み上げ。</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">💬</div>
+        <h3>Natural Language Config</h3>
+        <p>チャットで設定変更。「ダークモードにして」「ニュースをまとめて」— 日本語の自然言語コマンドに対応。</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <h3>MCP Server</h3>
+        <p>Model Context Protocolエンドポイント搭載。Claude Codeなど外部AIツールからニュース操作・設定変更が可能。</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎨</div>
+        <h3>Customizable UI</h3>
+        <p>3テーマ、7アクセントカラー、3密度設定、ダーク/ライトモード。A/Bテストで最適なデザインを自動選択。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="tech-stack">
+    <h2 class="section-title">Tech Stack</h2>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <strong>Backend</strong>
+        <span>Rust / axum 0.7 / SQLite</span>
+      </div>
+      <div class="tech-item">
+        <strong>AI</strong>
+        <span>Claude Sonnet 4.5 / Haiku 4.5</span>
+      </div>
+      <div class="tech-item">
+        <strong>TTS</strong>
+        <span>ElevenLabs / OpenAI / Venice / Cartesia / Fish Audio</span>
+      </div>
+      <div class="tech-item">
+        <strong>Frontend</strong>
+        <span>Vanilla JS PWA (No Framework)</span>
+      </div>
+      <div class="tech-item">
+        <strong>Infra</strong>
+        <span>Fly.io (Tokyo) / AWS Lambda</span>
+      </div>
+      <div class="tech-item">
+        <strong>Protocol</strong>
+        <span>MCP (Model Context Protocol)</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="categories-section">
+    <h2 class="section-title">Categories</h2>
+    <div class="cat-grid">
+      <div class="cat-item"><span class="cat-emoji">📰</span> General<br><small>Reuters, BBC, CNN, AP News, NHK, 朝日新聞, 毎日新聞, 読売新聞 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">💻</span> Technology<br><small>TechCrunch, Hacker News, The Verge, Wired, GitHub Blog, Dev.to, Gigazine 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">💼</span> Business<br><small>Bloomberg, Financial Times, 日経, CNBC, Forbes, Nikkei Asia 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">🎬</span> Entertainment<br><small>Variety, Rolling Stone, Deadline, ナタリー, ORICON 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">⚽</span> Sports<br><small>ESPN, BBC Sport, Bleacher Report, Sports Illustrated, スポニチ 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">🔬</span> Science<br><small>Nature, NASA, Science Daily, Space.com, Phys.org, WIRED Science, The Lancet, arXiv 他</small></div>
+      <div class="cat-item"><span class="cat-emoji">🎧</span> Podcast<br><small>NPR Up First, The Daily, BBC Global News, Lex Fridman, Huberman Lab, Rebuild.fm, TED Talks Daily 他</small></div>
+    </div>
+  </section>
+
+  <footer class="about-footer">
+    <div class="footer-inner">
+      <p>HyperNews &mdash; AI-Powered Global News Platform</p>
+      <p class="footer-links">
+        <a href="/">Home</a>
+        <a href="/settings.html">Settings</a>
+        <a href="/about.html">About</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
