@@ -7,7 +7,7 @@ Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一�
 | **news.xyz** | https://news.xyz | カード型ニュースサイト (3テーマ、チャット、TTS) |
 | **news.online** | https://news.online | TikTok風 縦スワイプ AI音声ニュース (Apple Liquid Glass デザイン) |
 
-> **余談**: news.online のドメインは間違えて 800万円で購入してしまったため、元を取るべく全力で開発中。
+> **余談**: news.online のドメインはいいサービスを思いついて勢いで取得したら 800万円だった。まさかそんな値段だとは思わなかったが、後悔はしていない。
 
 ---
 
