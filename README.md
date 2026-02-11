@@ -1,6 +1,13 @@
-# AGI — AI ニュースポッドキャストプラットフォーム
+# HyperNews — AI ニュースポッドキャストプラットフォーム
 
-Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一バイナリで **news.xyz**（カード型ニュースサイト）と **news.online**（TikTok風縦スワイプ音声ニュース）の 2 サイトを提供。
+Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一バイナリ・同一 Docker イメージで **2 つのサイトを本番運用中**:
+
+| サイト | URL | 内容 |
+|--------|-----|------|
+| **news.xyz** | https://news.xyz | カード型ニュースサイト (3テーマ、チャット、TTS) |
+| **news.online** | https://news.online | TikTok風 縦スワイプ AI音声ニュース (Apple Liquid Glass デザイン) |
+
+> **余談**: news.online のドメインは間違えて 800万円で購入してしまったため、元を取るべく全力で開発中。
 
 ---
 
@@ -30,7 +37,7 @@ Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一�
 ## プロジェクト構成
 
 ```
-agi/
+hypernews/
 ├── backend/
 │   ├── Cargo.toml              # ワークスペース定義
 │   ├── feeds.toml              # RSSフィード設定 ★ フィード追加はここ
@@ -98,8 +105,8 @@ agi/
 
 ```bash
 # 1. クローン
-git clone https://github.com/yukihamada/agi.git
-cd agi
+git clone https://github.com/yukihamada/hypernews.git
+cd hypernews
 
 # 2. 環境変数を設定
 export DATABASE_PATH=./news.db
@@ -268,14 +275,14 @@ fly secrets set OPENAI_API_KEY=sk-... -a news-online
 
 ```bash
 # ビルド
-docker build -t agi .
+docker build -t hypernews .
 
 # 起動
 docker run -p 8080:8080 \
-  -v agi-data:/data \
+  -v hypernews-data:/data \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e OPENAI_API_KEY=sk-... \
-  agi
+  hypernews
 ```
 
 ---
