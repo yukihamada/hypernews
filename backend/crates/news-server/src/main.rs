@@ -5,6 +5,7 @@ mod mcp;
 mod routes;
 mod stripe;
 
+use axum::body::Body;
 use axum::extract::Request;
 use axum::http::HeaderValue;
 use axum::middleware::{self, Next};
@@ -43,6 +44,10 @@ async fn main() {
     let fish_audio_api_key = std::env::var("FISH_AUDIO_API_KEY").unwrap_or_default();
     let aimlapi_key = std::env::var("AIMLAPI_KEY").unwrap_or_default();
     let venice_api_key = std::env::var("VENICE_API_KEY").unwrap_or_default();
+    let runpod_api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
+    let cosyvoice_endpoint_id = std::env::var("COSYVOICE_ENDPOINT_ID").unwrap_or_default();
+    let qwen_tts_endpoint_id = std::env::var("QWEN_TTS_ENDPOINT_ID").unwrap_or_default();
+    let qwen_omni_endpoint_id = std::env::var("QWEN_OMNI_ENDPOINT_ID").unwrap_or_default();
     let stripe_secret_key = std::env::var("STRIPE_SECRET_KEY").unwrap_or_default();
     let stripe_webhook_secret = std::env::var("STRIPE_WEBHOOK_SECRET").unwrap_or_default();
     let stripe_price_id = std::env::var("STRIPE_PRICE_ID").unwrap_or_default();
@@ -86,6 +91,11 @@ async fn main() {
         .build()
         .expect("Failed to build HTTP client");
 
+    let runpod_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .expect("Failed to build RunPod HTTP client");
+
     // Spawn background fetcher
     let fetcher_db = Arc::clone(&db);
     let fetcher_client = http_client.clone();
@@ -103,6 +113,11 @@ async fn main() {
         fish_audio_api_key,
         aimlapi_key,
         venice_api_key,
+        runpod_api_key,
+        runpod_client,
+        cosyvoice_endpoint_id,
+        qwen_tts_endpoint_id,
+        qwen_omni_endpoint_id,
         stripe_secret_key,
         stripe_webhook_secret,
         stripe_price_id,
@@ -110,9 +125,32 @@ async fn main() {
         base_url,
     });
 
+    let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
     let api_routes = Router::new()
+        .route("/article/:id", get({
+            let index_path = index_path.clone();
+            move |_: axum::extract::Path<String>| {
+                let index_path = index_path.clone();
+                async move {
+                    match tokio::fs::read(&index_path).await {
+                        Ok(contents) => axum::http::Response::builder()
+                            .status(200)
+                            .header("content-type", "text/html; charset=utf-8")
+                            .body(Body::from(contents))
+                            .unwrap(),
+                        Err(_) => axum::http::Response::builder()
+                            .status(500)
+                            .body(Body::from("Error"))
+                            .unwrap(),
+                    }
+                }
+            }
+        }))
         .route("/api/articles", get(routes::get_articles))
+        .route("/api/articles/:id", get(routes::get_article_by_id))
         .route("/api/categories", get(routes::get_categories))
+        .route("/api/search", get(routes::handle_search))
+        .route("/api/image-proxy", get(routes::handle_image_proxy))
         .route("/health", get(routes::health))
         .route("/api/articles/summarize", post(routes::handle_summarize))
         .route("/api/articles/questions", post(routes::handle_article_questions))
@@ -144,6 +182,8 @@ async fn main() {
         .route("/api/subscription/status", get(routes::handle_subscription_status))
         .route("/api/subscription/portal", post(routes::handle_billing_portal))
         .route("/api/usage", get(routes::handle_usage))
+        // Telemetry (vitals + errors from frontend beacon)
+        .route("/api/telemetry", post(routes::handle_telemetry))
         // MCP server endpoint
         .route("/mcp", post(mcp::handle_mcp))
         // SEO: server-side rendered index.html with per-domain OGP meta tags

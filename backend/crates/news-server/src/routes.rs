@@ -34,6 +34,11 @@ pub struct AppState {
     pub fish_audio_api_key: String,
     pub aimlapi_key: String,
     pub venice_api_key: String,
+    pub runpod_api_key: String,
+    pub runpod_client: reqwest::Client,
+    pub cosyvoice_endpoint_id: String,
+    pub qwen_tts_endpoint_id: String,
+    pub qwen_omni_endpoint_id: String,
     pub stripe_secret_key: String,
     pub stripe_webhook_secret: String,
     pub stripe_price_id: String,
@@ -330,6 +335,108 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
+pub async fn get_article_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Response {
+    match state.db.get_article_by_id(&id) {
+        Ok(Some(article)) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+            Json(serde_json::json!({"article": article})),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Article not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn handle_search(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let q = params.get("q").cloned().unwrap_or_default();
+    if q.is_empty() {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({"articles": [], "query": ""})),
+        )
+            .into_response();
+    }
+    let limit = params
+        .get("limit")
+        .and_then(|l| l.parse::<i64>().ok())
+        .unwrap_or(20)
+        .min(100)
+        .max(1);
+    match state.db.search_articles(&q, limit) {
+        Ok(articles) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+            Json(serde_json::json!({"articles": articles, "query": q})),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to search articles");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+pub async fn handle_image_proxy(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let url = match params.get("url") {
+        Some(u) if !u.is_empty() => u.clone(),
+        _ => {
+            return (StatusCode::BAD_REQUEST, "Missing url param").into_response();
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap();
+
+    match client.get(&url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            let content_type = resp
+                .headers()
+                .get("content-type")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("image/jpeg")
+                .to_string();
+
+            match resp.bytes().await {
+                Ok(bytes) => {
+                    let headers = [
+                        (header::CONTENT_TYPE, content_type),
+                        (
+                            header::CACHE_CONTROL,
+                            "public, max-age=86400".to_string(),
+                        ),
+                    ];
+                    (headers, bytes).into_response()
+                }
+                Err(_) => (StatusCode::BAD_GATEWAY, "Failed to read image").into_response(),
+            }
+        }
+        _ => (StatusCode::BAD_GATEWAY, "Failed to fetch image").into_response(),
+    }
+}
+
 pub async fn handle_summarize(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -408,8 +515,8 @@ pub async fn handle_summarize(
                 "article_count": article_count
             });
 
-            // Cache for 30 minutes
-            let _ = state.db.set_cache(&ckey, "summarize", &resp_json.to_string(), 1800);
+            // Cache for 3 hours
+            let _ = state.db.set_cache(&ckey, "summarize", &resp_json.to_string(), 10800);
 
             (StatusCode::OK, Json(resp_json)).into_response()
         }
@@ -484,6 +591,7 @@ pub struct PodcastGenerateRequest {
     pub description: String,
     pub source: String,
     pub url: Option<String>,
+    pub provider: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -511,10 +619,20 @@ pub async fn handle_podcast_generate(
             .into_response();
     }
 
-    if state.openai_api_key.is_empty() {
+    let use_qwen_omni = body.provider.as_deref() == Some("qwen-omni");
+
+    if !use_qwen_omni && state.openai_api_key.is_empty() {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(serde_json::json!({"error": "OpenAI APIキーが設定されていません（TTS用）"})),
+        )
+            .into_response();
+    }
+
+    if use_qwen_omni && (state.runpod_api_key.is_empty() || state.qwen_omni_endpoint_id.is_empty()) {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Qwen-Omni endpoint が設定されていません"})),
         )
             .into_response();
     }
@@ -564,68 +682,102 @@ pub async fn handle_podcast_generate(
     // Generate TTS for each line (host=coral, analyst=echo)
     let mut audio_segments = Vec::new();
     for line in &dialogue {
-        let voice = if line.speaker == "host" { "coral" } else { "echo" };
-        let tts_instruction = if line.speaker == "host" {
-            "日本語のニュースポッドキャストのホストとして、親しみやすく明るいトーンで自然に話してください。"
-        } else {
-            "日本語のニュース解説者として、落ち着いた知的なトーンで分析的に話してください。"
-        };
-        let tts_body = serde_json::json!({
-            "model": "gpt-4o-mini-tts",
-            "input": line.text,
-            "voice": voice,
-            "response_format": "mp3",
-            "instructions": tts_instruction
-        });
-
-        match state.http_client
-            .post("https://api.openai.com/v1/audio/speech")
-            .header("Authorization", format!("Bearer {}", state.openai_api_key))
-            .header("content-type", "application/json")
-            .json(&tts_body)
-            .send()
-            .await
-        {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.bytes().await {
-                    Ok(bytes) => {
-                        let b64 = base64::Engine::encode(
-                            &base64::engine::general_purpose::STANDARD,
-                            &bytes,
-                        );
-                        audio_segments.push(AudioSegment {
-                            speaker: line.speaker.clone(),
-                            text: line.text.clone(),
-                            audio_base64: b64,
-                        });
-                    }
-                    Err(e) => {
-                        warn!(error = %e, speaker = %line.speaker, "TTS bytes read failed");
-                        audio_segments.push(AudioSegment {
-                            speaker: line.speaker.clone(),
-                            text: line.text.clone(),
-                            audio_base64: String::new(),
-                        });
-                    }
+        if use_qwen_omni {
+            // Use Qwen-Omni via RunPod
+            let omni_voice = if line.speaker == "host" { "Chelsie" } else { "Ethan" };
+            let system_prompt = if line.speaker == "host" {
+                "あなたは人気ニュースポッドキャストのホストです。親しみやすく明るいトーンで、リスナーに直接語りかけるように話してください。"
+            } else {
+                "あなたはニュース解説の専門家です。落ち着いた知的なトーンで、分析的に語ってください。"
+            };
+            let input = serde_json::json!({
+                "text": line.text,
+                "voice": omni_voice,
+                "system_prompt": system_prompt
+            });
+            match runpod_async(&state, &state.qwen_omni_endpoint_id, input).await {
+                Ok(output) => {
+                    let b64 = output["audio_base64"].as_str().unwrap_or("").to_string();
+                    audio_segments.push(AudioSegment {
+                        speaker: line.speaker.clone(),
+                        text: line.text.clone(),
+                        audio_base64: b64,
+                    });
+                }
+                Err(e) => {
+                    warn!(error = %e, speaker = %line.speaker, "Qwen-Omni TTS failed");
+                    audio_segments.push(AudioSegment {
+                        speaker: line.speaker.clone(),
+                        text: line.text.clone(),
+                        audio_base64: String::new(),
+                    });
                 }
             }
-            Ok(resp) => {
-                let status = resp.status();
-                let err_body = resp.text().await.unwrap_or_default();
-                warn!(status = %status, body = %err_body, speaker = %line.speaker, "TTS generation failed");
-                audio_segments.push(AudioSegment {
-                    speaker: line.speaker.clone(),
-                    text: line.text.clone(),
-                    audio_base64: String::new(),
-                });
-            }
-            Err(e) => {
-                warn!(error = %e, speaker = %line.speaker, "TTS request failed");
-                audio_segments.push(AudioSegment {
-                    speaker: line.speaker.clone(),
-                    text: line.text.clone(),
-                    audio_base64: String::new(),
-                });
+        } else {
+            // Use OpenAI TTS
+            let voice = if line.speaker == "host" { "coral" } else { "echo" };
+            let tts_instruction = if line.speaker == "host" {
+                "あなたは人気ニュースポッドキャストのホストです。以下のルールで話してください：\n- 親しみやすく明るいトーンで、リスナーに直接語りかけるように話す\n- 自然な相づちや感嘆を入れ、会話感を出す\n- 句読点で適切に間を取り、聞き取りやすくする\n- 棒読みは厳禁。人間同士の会話のようなリズムで話す"
+            } else {
+                "あなたはニュース解説の専門家です。以下のルールで話してください：\n- 落ち着いた知的なトーンで、分析的に語る\n- 重要なポイントは少し強調し、説得力を持たせる\n- 自然な話し言葉で、硬すぎない表現を使う\n- 棒読みは厳禁。聞き手が理解しやすいペースで話す"
+            };
+            let tts_body = serde_json::json!({
+                "model": "gpt-4o-mini-tts",
+                "input": line.text,
+                "voice": voice,
+                "response_format": "mp3",
+                "instructions": tts_instruction
+            });
+
+            match state.http_client
+                .post("https://api.openai.com/v1/audio/speech")
+                .header("Authorization", format!("Bearer {}", state.openai_api_key))
+                .header("content-type", "application/json")
+                .json(&tts_body)
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    match resp.bytes().await {
+                        Ok(bytes) => {
+                            let b64 = base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                &bytes,
+                            );
+                            audio_segments.push(AudioSegment {
+                                speaker: line.speaker.clone(),
+                                text: line.text.clone(),
+                                audio_base64: b64,
+                            });
+                        }
+                        Err(e) => {
+                            warn!(error = %e, speaker = %line.speaker, "TTS bytes read failed");
+                            audio_segments.push(AudioSegment {
+                                speaker: line.speaker.clone(),
+                                text: line.text.clone(),
+                                audio_base64: String::new(),
+                            });
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let err_body = resp.text().await.unwrap_or_default();
+                    warn!(status = %status, body = %err_body, speaker = %line.speaker, "TTS generation failed");
+                    audio_segments.push(AudioSegment {
+                        speaker: line.speaker.clone(),
+                        text: line.text.clone(),
+                        audio_base64: String::new(),
+                    });
+                }
+                Err(e) => {
+                    warn!(error = %e, speaker = %line.speaker, "TTS request failed");
+                    audio_segments.push(AudioSegment {
+                        speaker: line.speaker.clone(),
+                        text: line.text.clone(),
+                        audio_base64: String::new(),
+                    });
+                }
             }
         }
     }
@@ -672,7 +824,7 @@ pub async fn get_feed(
             (
                 StatusCode::OK,
                 [
-                    (header::CACHE_CONTROL, "public, max-age=60"),
+                    (header::CACHE_CONTROL, "public, max-age=30, stale-while-revalidate=60"),
                     (header::CONTENT_TYPE, "application/json; charset=utf-8"),
                 ],
                 Json(body),
@@ -1061,6 +1213,33 @@ const VENICE_TTS_VOICES: &[(&str, &str, bool)] = &[
     ("am_onyx",   "Onyx（男性・深み）", false),
 ];
 
+// CosyVoice 2 voices (RunPod)
+const COSYVOICE_VOICES: &[(&str, &str, bool)] = &[
+    ("日本語女性", "CosyVoice 日本語女性", true),
+    ("日本語男性", "CosyVoice 日本語男性", true),
+    ("英語女性",   "CosyVoice English Female", false),
+    ("英語男性",   "CosyVoice English Male", false),
+    ("中国語女性", "CosyVoice 中国語女性", false),
+    ("中国語男性", "CosyVoice 中国語男性", false),
+];
+
+// Qwen3-TTS voices (RunPod) — language-based generation
+const QWEN_TTS_VOICES: &[(&str, &str, bool)] = &[
+    ("Japanese", "Qwen-TTS 日本語", true),
+    ("English",  "Qwen-TTS English", true),
+    ("Chinese",  "Qwen-TTS 中国語", false),
+    ("Korean",   "Qwen-TTS 한국어", false),
+    ("French",   "Qwen-TTS Français", false),
+    ("German",   "Qwen-TTS Deutsch", false),
+    ("Spanish",  "Qwen-TTS Español", false),
+];
+
+// Qwen2.5-Omni voices (RunPod) — for conversational/podcast
+const QWEN_OMNI_VOICES: &[(&str, &str, bool)] = &[
+    ("Chelsie", "Qwen-Omni Chelsie（女性・会話）", true),
+    ("Ethan",   "Qwen-Omni Ethan（男性・会話）", true),
+];
+
 pub async fn handle_tts_voices(State(state): State<Arc<AppState>>) -> Response {
     let mut voices: Vec<VoiceInfo> = Vec::new();
 
@@ -1212,6 +1391,48 @@ pub async fn handle_tts_voices(State(state): State<Arc<AppState>>) -> Response {
         }
     }
 
+    // Add CosyVoice voices (RunPod)
+    if !state.runpod_api_key.is_empty() && !state.cosyvoice_endpoint_id.is_empty() {
+        for (voice_key, label, rec) in COSYVOICE_VOICES {
+            voices.push(VoiceInfo {
+                voice_id: format!("cosyvoice:{}", voice_key),
+                name: label.to_string(),
+                category: "cosyvoice".to_string(),
+                preview_url: None,
+                labels: Some(serde_json::json!({"provider": "cosyvoice", "language": "multilingual"})),
+                recommended: *rec,
+            });
+        }
+    }
+
+    // Add Qwen3-TTS voices (RunPod)
+    if !state.runpod_api_key.is_empty() && !state.qwen_tts_endpoint_id.is_empty() {
+        for (voice_key, label, rec) in QWEN_TTS_VOICES {
+            voices.push(VoiceInfo {
+                voice_id: format!("qwen-tts:{}", voice_key),
+                name: label.to_string(),
+                category: "qwen-tts".to_string(),
+                preview_url: None,
+                labels: Some(serde_json::json!({"provider": "qwen-tts", "language": "multilingual"})),
+                recommended: *rec,
+            });
+        }
+    }
+
+    // Add Qwen2.5-Omni voices (RunPod)
+    if !state.runpod_api_key.is_empty() && !state.qwen_omni_endpoint_id.is_empty() {
+        for (voice_key, label, rec) in QWEN_OMNI_VOICES {
+            voices.push(VoiceInfo {
+                voice_id: format!("qwen-omni:{}", voice_key),
+                name: label.to_string(),
+                category: "qwen-omni".to_string(),
+                preview_url: None,
+                labels: Some(serde_json::json!({"provider": "qwen-omni", "language": "multilingual"})),
+                recommended: *rec,
+            });
+        }
+    }
+
     let available = !voices.is_empty();
 
     // Sort: cloned → recommended → other
@@ -1282,8 +1503,13 @@ pub async fn handle_tts(
     };
 
     // --- TTS generation with timeout + failover ---
+    let is_runpod = body.voice_id.starts_with("cosyvoice:")
+        || body.voice_id.starts_with("qwen-tts:")
+        || body.voice_id.starts_with("qwen-omni:");
+    let timeout_secs = if is_runpod { 90 } else { 10 };
+
     let primary_result = tokio::time::timeout(
-        Duration::from_secs(10),
+        Duration::from_secs(timeout_secs),
         tts_generate(&state, &body.voice_id, &text),
     ).await;
 
@@ -1291,13 +1517,26 @@ pub async fn handle_tts(
         Ok(Ok(bytes)) => bytes,
         Ok(Err(e)) => {
             warn!(error = %e, voice = %body.voice_id, "Primary TTS failed, trying failover");
+            // RunPod providers don't participate in failover (cold start too slow)
+            if is_runpod {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": format!("TTS生成に失敗しました: {}", e)})),
+                ).into_response();
+            }
             match try_failover(&state, &body.voice_id, &text).await {
                 Ok(bytes) => bytes,
                 Err(resp) => return resp,
             }
         }
         Err(_) => {
-            warn!(voice = %body.voice_id, "Primary TTS timed out (10s), trying failover");
+            warn!(voice = %body.voice_id, timeout_secs, "Primary TTS timed out, trying failover");
+            if is_runpod {
+                return (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    Json(serde_json::json!({"error": "TTS生成がタイムアウトしました。GPUのコールドスタート中の可能性があります。しばらくしてお試しください。"})),
+                ).into_response();
+            }
             match try_failover(&state, &body.voice_id, &text).await {
                 Ok(bytes) => bytes,
                 Err(resp) => return resp,
@@ -1305,9 +1544,9 @@ pub async fn handle_tts(
         }
     };
 
-    // Cache audio (base64, TTL 1h)
+    // Cache audio (base64, TTL 6h)
     let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &audio_bytes);
-    let _ = state.db.set_cache(&audio_ckey, "tts_audio", &b64, 3600);
+    let _ = state.db.set_cache(&audio_ckey, "tts_audio", &b64, 21600);
 
     increment_if_free(&state.db, &tier, "tts");
     audio_response(audio_bytes)
@@ -1393,6 +1632,15 @@ async fn tts_generate(state: &AppState, voice_id: &str, text: &str) -> Result<ax
     if let Some(voice_name) = voice_id.strip_prefix("venice:") {
         return tts_venice(state, text, voice_name).await;
     }
+    if let Some(voice_name) = voice_id.strip_prefix("cosyvoice:") {
+        return tts_cosyvoice(state, text, voice_name).await;
+    }
+    if let Some(voice_name) = voice_id.strip_prefix("qwen-tts:") {
+        return tts_qwen_tts(state, text, voice_name).await;
+    }
+    if let Some(voice_name) = voice_id.strip_prefix("qwen-omni:") {
+        return tts_qwen_omni(state, text, voice_name).await;
+    }
     // Default: ElevenLabs
     tts_elevenlabs(state, text, voice_id).await
 }
@@ -1405,8 +1653,9 @@ async fn tts_elevenlabs(state: &AppState, text: &str, voice_id: &str) -> Result<
         "text": text,
         "model_id": "eleven_multilingual_v2",
         "voice_settings": {
-            "stability": 0.7,
-            "similarity_boost": 0.85,
+            "stability": 0.5,
+            "similarity_boost": 0.8,
+            "style": 0.3,
             "use_speaker_boost": true
         }
     });
@@ -1436,7 +1685,7 @@ async fn tts_openai(state: &AppState, text: &str, voice: &str) -> Result<axum::b
         "input": text,
         "voice": voice,
         "response_format": "mp3",
-        "instructions": "日本語のニュースを読み上げてください。落ち着いた自然なトーンで、プロのニュースキャスターのように明瞭に発音してください。"
+        "instructions": "あなたはプロの日本語ニュースキャスターです。以下のルールで自然に読み上げてください：\n- 人間が話すような自然な抑揚とリズムで読む\n- 句読点では適切な間を取る\n- 重要なキーワードは少し強調する\n- 機械的な棒読みは絶対に避け、聞き手に語りかけるように話す\n- 固有名詞や数字は正確にはっきり発音する"
     });
     let resp = state.http_client.post("https://api.openai.com/v1/audio/speech")
         .header("Authorization", format!("Bearer {}", state.openai_api_key))
@@ -1567,6 +1816,163 @@ async fn tts_venice(state: &AppState, text: &str, voice: &str) -> Result<axum::b
         return Err(format!("Venice {status}: {body}"));
     }
     resp.bytes().await.map_err(|e| format!("Venice bytes: {e}"))
+}
+
+// --- RunPod Serverless helpers ---
+
+/// Call RunPod serverless endpoint synchronously (runsync).
+/// Used for CosyVoice and Qwen-TTS where response is fast enough.
+async fn runpod_runsync(
+    state: &AppState,
+    endpoint_id: &str,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if state.runpod_api_key.is_empty() {
+        return Err("RunPod APIキーが未設定".into());
+    }
+    let url = format!(
+        "https://api.runpod.ai/v2/{}/runsync",
+        endpoint_id
+    );
+    let body = serde_json::json!({ "input": input });
+    let resp = state
+        .runpod_client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", state.runpod_api_key))
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("RunPod request: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("RunPod {status}: {body}"));
+    }
+
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| format!("RunPod parse: {e}"))?;
+
+    match result["status"].as_str() {
+        Some("COMPLETED") => Ok(result["output"].clone()),
+        Some("FAILED") => Err(format!("RunPod job failed: {}", result["error"].as_str().unwrap_or("unknown"))),
+        Some(status) => Err(format!("RunPod unexpected status: {status}")),
+        None => Err(format!("RunPod: no status in response: {result}")),
+    }
+}
+
+/// Call RunPod serverless endpoint asynchronously with polling.
+/// Used for Qwen-Omni which may have longer cold starts.
+async fn runpod_async(
+    state: &AppState,
+    endpoint_id: &str,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if state.runpod_api_key.is_empty() {
+        return Err("RunPod APIキーが未設定".into());
+    }
+
+    // Submit job
+    let run_url = format!("https://api.runpod.ai/v2/{}/run", endpoint_id);
+    let body = serde_json::json!({ "input": input });
+    let resp = state
+        .runpod_client
+        .post(&run_url)
+        .header("Authorization", format!("Bearer {}", state.runpod_api_key))
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("RunPod submit: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("RunPod submit {status}: {body}"));
+    }
+
+    let submit_result: serde_json::Value = resp.json().await
+        .map_err(|e| format!("RunPod submit parse: {e}"))?;
+    let job_id = submit_result["id"].as_str()
+        .ok_or_else(|| "RunPod: no job id in response".to_string())?;
+
+    // Poll for result
+    let status_url = format!("https://api.runpod.ai/v2/{}/status/{}", endpoint_id, job_id);
+    for _ in 0..60 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let resp = state
+            .runpod_client
+            .get(&status_url)
+            .header("Authorization", format!("Bearer {}", state.runpod_api_key))
+            .send()
+            .await
+            .map_err(|e| format!("RunPod poll: {e}"))?;
+
+        let result: serde_json::Value = resp.json().await
+            .map_err(|e| format!("RunPod poll parse: {e}"))?;
+
+        match result["status"].as_str() {
+            Some("COMPLETED") => return Ok(result["output"].clone()),
+            Some("FAILED") => return Err(format!("RunPod job failed: {}", result["error"].as_str().unwrap_or("unknown"))),
+            Some("IN_QUEUE") | Some("IN_PROGRESS") => continue,
+            Some(s) => return Err(format!("RunPod unexpected status: {s}")),
+            None => return Err(format!("RunPod: no status in poll response")),
+        }
+    }
+
+    Err("RunPod: polling timeout (120s)".into())
+}
+
+async fn tts_cosyvoice(state: &AppState, text: &str, voice: &str) -> Result<axum::body::Bytes, String> {
+    if state.cosyvoice_endpoint_id.is_empty() {
+        return Err("CosyVoice endpoint未設定".into());
+    }
+    let input = serde_json::json!({
+        "text": text,
+        "voice": voice,
+        "speed": 1.0
+    });
+    let output = runpod_runsync(state, &state.cosyvoice_endpoint_id, input).await?;
+    decode_runpod_audio(&output)
+}
+
+async fn tts_qwen_tts(state: &AppState, text: &str, language: &str) -> Result<axum::body::Bytes, String> {
+    if state.qwen_tts_endpoint_id.is_empty() {
+        return Err("Qwen-TTS endpoint未設定".into());
+    }
+    let input = serde_json::json!({
+        "text": text,
+        "language": language,
+    });
+    let output = runpod_runsync(state, &state.qwen_tts_endpoint_id, input).await?;
+    decode_runpod_audio(&output)
+}
+
+async fn tts_qwen_omni(state: &AppState, text: &str, voice: &str) -> Result<axum::body::Bytes, String> {
+    if state.qwen_omni_endpoint_id.is_empty() {
+        return Err("Qwen-Omni endpoint未設定".into());
+    }
+    let input = serde_json::json!({
+        "text": text,
+        "voice": voice,
+        "system_prompt": "あなたはプロの日本語ニュースキャスターです。自然な会話調で、親しみやすく明るいトーンで読み上げてください。"
+    });
+    let output = runpod_async(state, &state.qwen_omni_endpoint_id, input).await?;
+    decode_runpod_audio(&output)
+}
+
+/// Decode base64 audio from RunPod handler response.
+fn decode_runpod_audio(output: &serde_json::Value) -> Result<axum::body::Bytes, String> {
+    let audio_b64 = output["audio_base64"].as_str()
+        .ok_or_else(|| format!("RunPod: no audio_base64 in output: {output}"))?;
+    if audio_b64.is_empty() {
+        return Err("RunPod: empty audio output".into());
+    }
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, audio_b64)
+        .map_err(|e| format!("RunPod base64 decode: {e}"))?;
+    Ok(axum::body::Bytes::from(bytes))
 }
 
 // --- Admin API ---
@@ -2131,6 +2537,31 @@ pub async fn handle_usage(
                 .into_response()
         }
     }
+}
+
+// --- Telemetry endpoint (fire-and-forget from sendBeacon) ---
+
+pub async fn handle_telemetry(body: axum::body::Bytes) -> Response {
+    // Log telemetry data (vitals, errors) from frontend beacons
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
+        let telemetry_type = json["type"].as_str().unwrap_or("unknown");
+        match telemetry_type {
+            "vitals" => {
+                let url = json["url"].as_str().unwrap_or("");
+                let metrics = &json["metrics"];
+                info!(url, lcp = ?metrics["LCP"], inp = ?metrics["INP"], cls = ?metrics["CLS"], ttfb = ?metrics["TTFB"], "Web Vitals");
+            }
+            "errors" => {
+                let count = json["errors"].as_array().map(|a| a.len()).unwrap_or(0);
+                if count > 0 {
+                    let url = json["url"].as_str().unwrap_or("");
+                    warn!(url, count, "Client errors reported");
+                }
+            }
+            _ => {}
+        }
+    }
+    StatusCode::NO_CONTENT.into_response()
 }
 
 fn apply_action(db: &Db, action: &AdminAction) -> Result<(), String> {

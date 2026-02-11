@@ -3,9 +3,10 @@
  * v16: Expanded cache, offline improvements, settings/about pages cached
  */
 
-const CACHE_NAME = 'hypernews-v17';
+const CACHE_NAME = 'hypernews-v28';
 const API_CACHE = 'hypernews-api-v1';
 const IMG_CACHE = 'hypernews-img-v1';
+const TTS_CACHE = 'hypernews-tts-v1';
 const API_MAX_ENTRIES = 500;
 const IMG_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -15,28 +16,37 @@ const STATIC_ASSETS = [
   '/offline.html',
   '/settings.html',
   '/about.html',
+  '/pro.html',
   '/ab.html',
-  '/css/base.css?v=16',
-  '/css/site-claud.css?v=16',
-  '/css/theme-hacker.css?v=16',
-  '/css/theme-card.css?v=16',
-  '/css/theme-lite.css?v=16',
-  '/css/chat.css?v=16',
-  '/css/settings.css?v=16',
-  '/css/about.css?v=16',
-  '/js/storage.js?v=16',
-  '/js/site.js?v=16',
-  '/js/ab.js?v=16',
-  '/js/subscription.js?v=16',
-  '/js/api.js?v=16',
-  '/js/theme.js?v=16',
-  '/js/renderer.js?v=16',
-  '/js/tts.js?v=16',
-  '/js/commands.js?v=16',
-  '/js/chat.js?v=16',
-  '/js/app.js?v=16',
-  '/js/sw-register.js?v=16',
-  '/js/settings.js?v=16',
+  '/css/base.css?v=33',
+  '/css/site-claud.css?v=33',
+  '/css/theme-hacker.css?v=33',
+  '/css/theme-card.css?v=33',
+  '/css/theme-lite.css?v=33',
+  '/css/theme-terminal.css?v=33',
+  '/css/theme-magazine.css?v=33',
+  '/css/theme-brutalist.css?v=33',
+  '/css/theme-pastel.css?v=33',
+  '/css/theme-neon.css?v=33',
+  '/css/chat.css?v=33',
+  '/css/settings.css?v=33',
+  '/css/about.css?v=33',
+  '/css/pro.css?v=33',
+  '/js/errors.js?v=33',
+  '/js/vitals.js?v=33',
+  '/js/storage.js?v=33',
+  '/js/site.js?v=33',
+  '/js/ab.js?v=33',
+  '/js/subscription.js?v=33',
+  '/js/api.js?v=33',
+  '/js/theme.js?v=33',
+  '/js/renderer.js?v=33',
+  '/js/tts.js?v=33',
+  '/js/commands.js?v=33',
+  '/js/chat.js?v=33',
+  '/js/app.js?v=33',
+  '/js/sw-register.js?v=33',
+  '/js/settings.js?v=33',
   '/manifest.json',
   '/manifest-claud.json',
   '/manifest-online.json',
@@ -44,18 +54,18 @@ const STATIC_ASSETS = [
   '/manifest-chatnews.json',
   '/manifest-yournews.json',
   '/manifest-velo.json',
-  '/css/feed.css?v=17',
-  '/js/feed.js?v=17',
-  '/js/feed-player.js?v=17',
-  '/js/feed-voice.js?v=17',
-  '/css/cloud.css?v=1',
-  '/js/cloud.js?v=1',
-  '/css/chatnews.css?v=1',
-  '/js/chatnews.js?v=1',
-  '/css/yournews.css?v=1',
-  '/js/yournews.js?v=1',
-  '/css/velo.css?v=1',
-  '/js/velo.js?v=1',
+  '/css/feed.css?v=33',
+  '/js/feed.js?v=33',
+  '/js/feed-player.js?v=33',
+  '/js/feed-voice.js?v=33',
+  '/css/cloud.css?v=33',
+  '/js/cloud.js?v=33',
+  '/css/chatnews.css?v=33',
+  '/js/chatnews.js?v=33',
+  '/css/yournews.css?v=33',
+  '/js/yournews.js?v=33',
+  '/css/velo.css?v=33',
+  '/js/velo.js?v=33',
 ];
 
 // Install: precache static assets
@@ -72,7 +82,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k !== CACHE_NAME && k !== API_CACHE && k !== IMG_CACHE)
+          .filter((k) => k !== CACHE_NAME && k !== API_CACHE && k !== IMG_CACHE && k !== TTS_CACHE)
           .map((k) => caches.delete(k))
       )
     )

@@ -138,6 +138,17 @@ const Tts = (() => {
     return true;
   }
 
+  /** djb2 hash for cache keys */
+  function djb2Hash(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0;
+    }
+    return hash.toString(36);
+  }
+
+  const TTS_CACHE_NAME = 'hypernews-tts-v1';
+
   async function _speak(text, onEnd) {
     const style = getStyle();
     if (style === 'off') { if (onEnd) onEnd(); return; }
@@ -145,23 +156,49 @@ const Tts = (() => {
     // API-based voice (ElevenLabs, OpenAI, Cartesia, Fish Audio)
     const isApiVoice = style.startsWith('el:') || style.startsWith('openai:')
       || style.startsWith('cartesia:') || style.startsWith('fish:')
-      || style.startsWith('aimlapi:') || style.startsWith('venice:');
+      || style.startsWith('aimlapi:') || style.startsWith('venice:')
+      || style.startsWith('cosyvoice:') || style.startsWith('qwen-tts:')
+      || style.startsWith('qwen-omni:');
     if (isApiVoice) {
       const voiceId = style.startsWith('el:') ? style.slice(3) : style; // el: strips prefix, others sent as-is
       try {
-        const auth = typeof Subscription !== 'undefined' ? Subscription.authHeaders() : {};
-        const res = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...auth },
-          body: JSON.stringify({ text, voice_id: voiceId }),
-        });
-        if (res.status === 402) {
-          if (typeof Subscription !== 'undefined') Subscription.showUpgradePrompt('TTS', 3);
-          if (onEnd) onEnd();
-          return;
+        // Check Cache API for cached audio
+        const textHash = djb2Hash(text);
+        const cacheUrl = `/tts-cache/${encodeURIComponent(voiceId)}/${textHash}`;
+        let blob = null;
+        const ttsCache = typeof caches !== 'undefined' ? await caches.open(TTS_CACHE_NAME).catch(() => null) : null;
+        if (ttsCache) {
+          const cached = await ttsCache.match(cacheUrl);
+          if (cached) {
+            blob = await cached.blob();
+          }
         }
-        if (!res.ok) throw new Error(`TTS error: ${res.status}`);
-        const blob = await res.blob();
+
+        if (!blob) {
+          // Cache miss — fetch from server
+          const auth = typeof Subscription !== 'undefined' ? Subscription.authHeaders() : {};
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...auth },
+            body: JSON.stringify({ text, voice_id: voiceId }),
+          });
+          if (res.status === 402) {
+            if (typeof Subscription !== 'undefined') Subscription.showUpgradePrompt('TTS', 3);
+            if (onEnd) onEnd();
+            return;
+          }
+          if (!res.ok) throw new Error(`TTS error: ${res.status}`);
+          blob = await res.blob();
+
+          // Store in Cache API
+          if (ttsCache) {
+            const cacheRes = new Response(blob.slice(0), {
+              headers: { 'Content-Type': 'audio/mpeg' },
+            });
+            ttsCache.put(cacheUrl, cacheRes).catch(() => {});
+          }
+        }
+
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         currentAudio = audio;
