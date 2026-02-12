@@ -64,10 +64,12 @@ const App = (() => {
     els.bookmarkFooter = document.getElementById('bookmark-footer');
 
     // Apply stored preferences
+    if (typeof I18n !== 'undefined') I18n.init();
     Theme.apply();
     Tts.init();
     ReadHistory.init();
     Bookmarks.init();
+    CloneVoices.init();
     EcoSystem.init();
 
     // A/B Test: assign variant and apply design
@@ -217,6 +219,20 @@ const App = (() => {
       modeToggle.addEventListener('click', () => Theme.toggleMode());
     }
 
+    // Language toggle button
+    const langToggle = document.getElementById('lang-toggle');
+    const langLabel = document.getElementById('lang-label');
+    if (langToggle && typeof I18n !== 'undefined') {
+      langLabel.textContent = I18n.getLang().toUpperCase();
+      langToggle.addEventListener('click', () => {
+        const next = I18n.getLang() === 'en' ? 'ja' : 'en';
+        I18n.setLang(next);
+        langLabel.textContent = next.toUpperCase();
+        Renderer.renderCategories(els.nav, categories, currentCategory);
+        loadArticles();
+      });
+    }
+
     // Bookmark button click (event delegation)
     els.articles.addEventListener('click', (e) => {
       const btn = e.target.closest('.bookmark-btn');
@@ -248,7 +264,7 @@ const App = (() => {
           navigator.share(shareData).catch(() => {});
         } else if (navigator.clipboard) {
           navigator.clipboard.writeText(currentDetailArticle.url).then(() => {
-            Chat.addMessage('URLをクリップボードにコピーしました。', 'bot');
+            Chat.addMessage(t('url_copied'), 'bot');
           }).catch(() => {});
         }
       });
@@ -367,7 +383,7 @@ const App = (() => {
         }
       });
     } catch {
-      els.articles.innerHTML = '<div class="loading">検索に失敗しました</div>';
+      els.articles.innerHTML = `<div class="loading">${t('search.failed')}</div>`;
     }
   }
 
@@ -403,7 +419,7 @@ const App = (() => {
   function renderBookmarkList() {
     const all = Bookmarks.getAll();
     if (all.length === 0) {
-      els.bookmarkList.innerHTML = '<div class="bookmark-empty">ブックマークした記事はありません</div>';
+      els.bookmarkList.innerHTML = `<div class="bookmark-empty">${t('bookmarks.empty')}</div>`;
       els.bookmarkFooter.hidden = true;
       return;
     }
@@ -507,7 +523,7 @@ const App = (() => {
         spinner = document.createElement('div');
         spinner.id = 'scroll-spinner';
         spinner.className = 'scroll-spinner';
-        spinner.textContent = '読み込み中';
+        spinner.textContent = t('loading_more');
         els.articles.parentNode.insertBefore(spinner, els.sentinel);
       }
     }
@@ -548,7 +564,7 @@ const App = (() => {
       const sp = document.getElementById('scroll-spinner');
       if (sp) sp.remove();
       if (!append) {
-        els.articles.innerHTML = '<div class="loading">ニュースの読み込みに失敗しました。後ほどお試しください。</div>';
+        els.articles.innerHTML = `<div class="loading">${t('error.load_failed')}</div>`;
       }
     } finally {
       isLoading = false;
@@ -567,13 +583,14 @@ const App = (() => {
     const siteName = (typeof Site !== 'undefined') ? Site.name : 'news.xyz';
     const catInfo = categories.find(c => c.id === cat);
     if (cat && catInfo) {
-      document.title = `${catInfo.label_ja} - ${siteName}`;
-      setMeta('og:title', `${catInfo.label_ja}ニュース - ${siteName}`);
-      setMeta('description', `${catInfo.label_ja}カテゴリの最新ニュースをAIが要約・質問応答。${siteName}。`);
+      const catName = typeof I18n !== 'undefined' ? I18n.categoryLabel(catInfo) : catInfo.label_ja;
+      document.title = `${catName} - ${siteName}`;
+      setMeta('og:title', t('meta.cat_news', { cat: catName }) + ` - ${siteName}`);
+      setMeta('description', t('meta.cat_desc', { cat: catName }) + ` ${siteName}.`);
     } else {
-      document.title = `${siteName} - AI超高速ニュース`;
-      setMeta('og:title', `${siteName} - AI超高速ニュース`);
-      setMeta('description', `AI搭載の超高速ニュースアグリゲーター。最新ニュースをAIが要約・質問応答・読み上げ。`);
+      document.title = `${siteName} - ${t('meta.title_suffix')}`;
+      setMeta('og:title', `${siteName} - ${t('meta.title_suffix')}`);
+      setMeta('description', t('meta.default_desc'));
     }
   }
 
@@ -604,7 +621,7 @@ const App = (() => {
     script.textContent = JSON.stringify({
       '@context': 'https://schema.org',
       '@type': 'ItemList',
-      name: `${siteName} 最新ニュース`,
+      name: t('meta.latest_news', { site: siteName }),
       itemListElement: items.map((item, i) => ({
         '@type': 'ListItem',
         position: i + 1,
@@ -629,7 +646,7 @@ const App = (() => {
     els.detailImgWrap.innerHTML = article.imageUrl
       ? `<img src="${article.imageUrl}" alt="${Renderer.escHtml(article.title)}" loading="lazy">`
       : '';
-    els.detailQuestions.innerHTML = '<div class="detail-loading">質問を生成中</div>';
+    els.detailQuestions.innerHTML = `<div class="detail-loading">${t('detail.generating_questions_short')}</div>`;
     els.detailAnswers.innerHTML = '';
 
     // Push permalink URL
@@ -653,7 +670,7 @@ const App = (() => {
     if (!isOffline) {
       fetchQuestions(article);
     } else {
-      els.detailQuestions.innerHTML = '<div class="detail-loading" style="font-style:normal;color:var(--muted)">オフラインのためAI機能は利用できません</div>';
+      els.detailQuestions.innerHTML = `<div class="detail-loading" style="font-style:normal;color:var(--muted)">${t('detail.offline')}</div>`;
     }
   }
 
@@ -693,7 +710,7 @@ const App = (() => {
           title: a.title,
           url: a.url,
           source: a.source,
-          time: a.published_at ? new Date(a.published_at).toLocaleString('ja-JP') : '',
+          time: a.published_at ? new Date(a.published_at).toLocaleString(typeof I18n !== 'undefined' && I18n.isJa() ? 'ja-JP' : 'en-US') : '',
           description: a.description || '',
           imageUrl: proxyImg,
         });
@@ -708,7 +725,7 @@ const App = (() => {
       const data = await Api.getArticleQuestions(article.title, article.description, article.source, article.url);
       els.detailQuestions.innerHTML = '';
       if (!data.questions || data.questions.length === 0) {
-        els.detailQuestions.innerHTML = '<div class="detail-loading" style="font-style:normal">質問を生成できませんでした</div>';
+        els.detailQuestions.innerHTML = `<div class="detail-loading" style="font-style:normal">${t('detail.questions_failed')}</div>`;
         return;
       }
       for (const q of data.questions) {
@@ -728,13 +745,13 @@ const App = (() => {
       const errDiv = document.createElement('div');
       errDiv.className = 'detail-loading';
       errDiv.style.fontStyle = 'normal';
-      errDiv.textContent = '質問の生成に失敗しました ';
+      errDiv.textContent = t('detail.questions_error');
       const retryBtn = document.createElement('button');
       retryBtn.className = 'detail-q-chip';
       retryBtn.type = 'button';
-      retryBtn.textContent = '再試行';
+      retryBtn.textContent = t('detail.retry');
       retryBtn.addEventListener('click', () => {
-        els.detailQuestions.innerHTML = '<div class="detail-loading">質問を生成中</div>';
+        els.detailQuestions.innerHTML = `<div class="detail-loading">${t('detail.generating_questions_short')}</div>`;
         fetchQuestions(article);
       });
       errDiv.appendChild(retryBtn);
@@ -745,7 +762,7 @@ const App = (() => {
   async function askQuestion(article, question) {
     const block = document.createElement('div');
     block.className = 'detail-answer-block';
-    block.innerHTML = `<div class="detail-answer-q">${Renderer.escHtml(question)}</div><div class="detail-answer-loading">回答を生成中</div>`;
+    block.innerHTML = `<div class="detail-answer-q">${Renderer.escHtml(question)}</div><div class="detail-answer-loading">${t('detail.generating_answer')}</div>`;
     els.detailAnswers.appendChild(block);
     block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     const detailBody = els.detailPanel.querySelector('.detail-body');
@@ -774,7 +791,7 @@ const App = (() => {
       if (loading) {
         loading.className = 'detail-answer-a';
         loading.style.color = 'var(--muted)';
-        loading.innerHTML = 'トークン不足です。<a href="/pro.html" style="color:var(--accent);text-decoration:underline">Proプラン</a>で無制限に。';
+        loading.innerHTML = `${t('eco.tokens_short')} <a href="/pro.html" style="color:var(--accent);text-decoration:underline">${t('eco.pro_unlimited_link')}</a>`;
       }
       return;
     }
@@ -788,7 +805,7 @@ const App = (() => {
         Api.askArticleQuestion(article.title, article.description, article.source, question, article.url),
         Api.searchArticles(question, 5).catch(() => ({ articles: [] })),
       ]);
-      const answer = data.answer || '回答を取得できませんでした';
+      const answer = data.answer || t('detail.answer_failed');
       EcoSystem.setQueryCache(cacheKey, answer);
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
@@ -809,16 +826,16 @@ const App = (() => {
         loading.className = 'detail-answer-a';
         loading.textContent = '';
         loading.style.color = 'var(--muted)';
-        const errText = document.createTextNode('回答の取得に失敗しました ');
+        const errText = document.createTextNode(t('detail.answer_error'));
         loading.appendChild(errText);
         const retryBtn = document.createElement('button');
         retryBtn.className = 'detail-q-chip';
         retryBtn.type = 'button';
-        retryBtn.textContent = '再試行';
+        retryBtn.textContent = t('detail.retry');
         retryBtn.addEventListener('click', () => {
           loading.className = 'detail-answer-loading';
           loading.style.color = '';
-          loading.textContent = '回答を生成中';
+          loading.textContent = t('detail.generating_answer');
           fetchAnswer(article, question, block);
         });
         loading.appendChild(retryBtn);
@@ -829,7 +846,7 @@ const App = (() => {
   function appendRelatedArticles(block, articles) {
     const wrap = document.createElement('div');
     wrap.className = 'detail-related';
-    wrap.innerHTML = '<div class="detail-related-label">関連記事</div>';
+    wrap.innerHTML = `<div class="detail-related-label">${t('detail.related')}</div>`;
     for (const a of articles) {
       const link = document.createElement('a');
       link.className = 'detail-related-item';
@@ -849,7 +866,7 @@ const App = (() => {
       if (loading) {
         loading.className = 'detail-answer-a';
         loading.style.color = 'var(--muted)';
-        loading.innerHTML = 'トークン不足です。<a href="/pro.html" style="color:var(--accent);text-decoration:underline">Proプラン</a>で無制限に。';
+        loading.innerHTML = `${t('eco.tokens_short')} <a href="/pro.html" style="color:var(--accent);text-decoration:underline">${t('eco.pro_unlimited_link')}</a>`;
       }
       return;
     }
@@ -857,7 +874,7 @@ const App = (() => {
     const cacheKey = `${article.title}|${question}`;
     try {
       const data = await Api.askArticleQuestion(article.title, article.description, article.source, question, article.url);
-      const answer = data.answer || '回答を取得できませんでした';
+      const answer = data.answer || t('detail.answer_failed');
       EcoSystem.setQueryCache(cacheKey, answer);
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
@@ -872,16 +889,16 @@ const App = (() => {
         loading.className = 'detail-answer-a';
         loading.textContent = '';
         loading.style.color = 'var(--muted)';
-        const errText = document.createTextNode('回答の取得に失敗しました ');
+        const errText = document.createTextNode(t('detail.answer_error'));
         loading.appendChild(errText);
         const retryBtn = document.createElement('button');
         retryBtn.className = 'detail-q-chip';
         retryBtn.type = 'button';
-        retryBtn.textContent = '再試行';
+        retryBtn.textContent = t('detail.retry');
         retryBtn.addEventListener('click', () => {
           loading.className = 'detail-answer-loading';
           loading.style.color = '';
-          loading.textContent = '回答を生成中';
+          loading.textContent = t('detail.generating_answer');
           fetchAnswer(article, question, block);
         });
         loading.appendChild(retryBtn);
@@ -1113,11 +1130,12 @@ const EcoSystem = (() => {
     const hitRate = total > 0 ? Math.round(state.cacheHits / total * 100) : 0;
     const isPro = typeof Subscription !== 'undefined' && Subscription.isPro();
     const low = !isPro && state.tokens <= 5;
+    const hitLabel = `${typeof t === 'function' ? t('eco.cache_hit') : 'Cache hit rate'} ${state.cacheHits}/${total}`;
     badge.innerHTML = isPro
-      ? `<span class="eco-tokens eco-tokens--pro" title="Pro: 無制限">∞<small>T</small></span>` +
-        `<span class="eco-hitrate" title="キャッシュヒット率 ${state.cacheHits}/${total}">${hitRate}%<small>HIT</small></span>`
-      : `<span class="eco-tokens${low ? ' eco-tokens--low' : ''}" title="AIトークン（毎日+${DAILY_REFILL}）">${state.tokens}<small>T</small></span>` +
-        `<span class="eco-hitrate" title="キャッシュヒット率 ${state.cacheHits}/${total}">${hitRate}%<small>HIT</small></span>`;
+      ? `<span class="eco-tokens eco-tokens--pro" title="${typeof t === 'function' ? t('eco.pro_unlimited') : 'Pro: Unlimited'}">∞<small>T</small></span>` +
+        `<span class="eco-hitrate" title="${hitLabel}">${hitRate}%<small>HIT</small></span>`
+      : `<span class="eco-tokens${low ? ' eco-tokens--low' : ''}" title="${typeof t === 'function' ? t('eco.tokens_daily', { n: DAILY_REFILL }) : 'AI tokens (+' + DAILY_REFILL + '/day)'}">${state.tokens}<small>T</small></span>` +
+        `<span class="eco-hitrate" title="${hitLabel}">${hitRate}%<small>HIT</small></span>`;
   }
 
   function animateChange(delta) {

@@ -56,6 +56,18 @@ const Tts = (() => {
 
   function getVoices() {
     const all = [];
+    // Clone voices first
+    if (typeof CloneVoices !== 'undefined') {
+      for (const c of CloneVoices.getAll()) {
+        all.push({
+          id: `clone:${c.id}`,
+          label: `🎤 ${c.name}`,
+          type: 'clone',
+          category: 'clone',
+          recommended: true,
+        });
+      }
+    }
     for (const v of elVoices) {
       let label = v.name;
       if (v.category === 'cloned') label += ' (My Voice)';
@@ -97,7 +109,7 @@ const Tts = (() => {
     const style = getStyle();
     if (style === 'off') {
       Chat.openPanel();
-      Chat.addMessage('読み上げを使うには、ボイスを選んでください。', 'bot');
+      Chat.addMessage(typeof t === 'function' ? t('tts.select_voice') : 'Select a voice to use TTS.', 'bot');
       return;
     }
 
@@ -157,6 +169,50 @@ const Tts = (() => {
   async function _speak(text, onEnd) {
     const style = getStyle();
     if (style === 'off') { if (onEnd) onEnd(); return; }
+
+    // Clone voice — use /api/tts/clone endpoint
+    if (style.startsWith('clone:')) {
+      const cloneId = style.slice(6);
+      const clone = typeof CloneVoices !== 'undefined' ? CloneVoices.get(cloneId) : null;
+      if (!clone) { if (onEnd) onEnd(); return; }
+      try {
+        const auth = typeof Subscription !== 'undefined' ? Subscription.authHeaders() : {};
+        const res = await fetch('/api/tts/clone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...auth },
+          body: JSON.stringify({
+            text,
+            ref_audio: clone.refAudio,
+            ref_text: clone.refText,
+            language: 'Japanese',
+          }),
+        });
+        if (res.status === 402) {
+          if (typeof Subscription !== 'undefined') Subscription.showUpgradePrompt('TTS', 3);
+          if (onEnd) onEnd();
+          return;
+        }
+        if (!res.ok) throw new Error(`Clone TTS error: ${res.status}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudio = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          currentAudio = null;
+          if (onEnd) onEnd();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          currentAudio = null;
+          if (onEnd) onEnd();
+        };
+        audio.play();
+      } catch {
+        if (onEnd) onEnd();
+      }
+      return;
+    }
 
     // API-based voice (ElevenLabs, OpenAI, Cartesia, Fish Audio)
     const isApiVoice = style.startsWith('el:') || style.startsWith('openai:')
@@ -247,7 +303,7 @@ const Tts = (() => {
     const voices = getVoices();
     const voice = voices.find(v => v.id === style);
     document.querySelectorAll('.tts-btn').forEach(btn => {
-      btn.title = style === 'off' ? '読み上げOFF' : (voice?.label || '');
+      btn.title = style === 'off' ? (typeof t === 'function' ? t('tts.read_aloud') + ' OFF' : 'TTS OFF') : (voice?.label || '');
     });
   }
 

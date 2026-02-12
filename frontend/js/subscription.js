@@ -83,7 +83,7 @@ const Subscription = (() => {
               }
             }
             Chat.openPanel();
-            Chat.addMessage('Pro\u30d7\u30e9\u30f3\u3078\u306e\u30a2\u30c3\u30d7\u30b0\u30ec\u30fc\u30c9\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f\uff01AI\u6a5f\u80fd\u304c\u7121\u5236\u9650\u3067\u3054\u5229\u7528\u3044\u305f\u3060\u3051\u307e\u3059\u3002', 'bot');
+            Chat.addMessage(typeof t === 'function' ? t('sub.pro_complete') : 'Pro plan upgrade complete!', 'bot');
             return;
           }
         }
@@ -93,7 +93,7 @@ const Subscription = (() => {
         setTimeout(poll, 2000);
       } else {
         Chat.openPanel();
-        Chat.addMessage('Pro\u30d7\u30e9\u30f3\u306e\u6709\u52b9\u5316\u3092\u78ba\u8a8d\u4e2d\u3067\u3059\u3002\u3057\u3070\u3089\u304f\u304a\u5f85\u3061\u304f\u3060\u3055\u3044\u3002', 'bot');
+        Chat.addMessage(typeof t === 'function' ? t('sub.pro_verifying') : 'Verifying Pro plan activation.', 'bot');
       }
     };
     poll();
@@ -107,7 +107,7 @@ const Subscription = (() => {
         body: JSON.stringify({ device_id: getDeviceId() }),
       });
       if (res.status === 503) {
-        Chat.addMessage('サブスクリプション機能は現在準備中です。もうしばらくお待ちください。', 'bot');
+        Chat.addMessage(typeof t === 'function' ? t('sub.not_ready') : 'Subscription is not available yet.', 'bot');
         return;
       }
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -116,7 +116,7 @@ const Subscription = (() => {
         window.location.href = data.url;
       }
     } catch (err) {
-      Chat.addMessage(`エラー: ${err.message}`, 'bot');
+      Chat.addMessage(`Error: ${err.message}`, 'bot');
     }
   }
 
@@ -127,7 +127,7 @@ const Subscription = (() => {
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
       });
       if (res.status === 503) {
-        Chat.addMessage('課金管理機能は現在準備中です。もうしばらくお待ちください。', 'bot');
+        Chat.addMessage(typeof t === 'function' ? t('sub.billing_not_ready') : 'Billing management is not available yet.', 'bot');
         return;
       }
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -136,7 +136,7 @@ const Subscription = (() => {
         window.location.href = data.url;
       }
     } catch (err) {
-      Chat.addMessage(`エラー: ${err.message}`, 'bot');
+      Chat.addMessage(`Error: ${err.message}`, 'bot');
     }
   }
 
@@ -154,35 +154,36 @@ const Subscription = (() => {
     const suggestions = document.getElementById('chat-suggestions');
     Chat.openPanel();
 
+    const _t = typeof t === 'function' ? t : (k) => k;
+    const limitMsg = _t('sub.limit_reached', { feature, limit });
+
     if (tier === 'authenticated' || (typeof GoogleAuth !== 'undefined' && GoogleAuth.isAuthenticated())) {
       // Authenticated user → promote Pro
-      const msg = `${feature}の本日の利用回数（${limit}回）に達しました。Proプラン（¥500/月）で無制限にご利用いただけます。`;
-      Chat.addMessage(msg, 'bot');
+      Chat.addMessage(limitMsg + ' ' + _t('sub.limit_pro'), 'bot');
       if (suggestions) {
         suggestions.innerHTML = '';
         const btn = document.createElement('button');
         btn.className = 'chat-chip chip-accent';
         btn.type = 'button';
-        btn.textContent = 'Proにアップグレード';
+        btn.textContent = _t('sub.upgrade_to_pro');
         btn.addEventListener('click', () => {
-          Chat.addMessage('Proにアップグレード', 'user');
+          Chat.addMessage(_t('sub.upgrade_to_pro'), 'user');
           subscribe();
         });
         suggestions.appendChild(btn);
       }
     } else {
       // Free user → promote Google Sign-In + Pro
-      const msg = `${feature}の本日の利用回数（${limit}回）に達しました。Googleログインで制限が2倍に！`;
-      Chat.addMessage(msg, 'bot');
+      Chat.addMessage(limitMsg + ' ' + _t('sub.limit_google'), 'bot');
       if (suggestions) {
         suggestions.innerHTML = '';
         // Google Sign-In button
         const googleBtn = document.createElement('button');
         googleBtn.className = 'chat-chip chip-accent';
         googleBtn.type = 'button';
-        googleBtn.textContent = 'Googleでログイン';
+        googleBtn.textContent = _t('sub.google_signin');
         googleBtn.addEventListener('click', () => {
-          Chat.addMessage('Googleでログイン', 'user');
+          Chat.addMessage(_t('sub.google_signin'), 'user');
           if (typeof GoogleAuth !== 'undefined') {
             GoogleAuth.showOneTap();
             // Also render a button in suggestions area
@@ -199,9 +200,9 @@ const Subscription = (() => {
         const proBtn = document.createElement('button');
         proBtn.className = 'chat-chip';
         proBtn.type = 'button';
-        proBtn.textContent = 'Proプラン（無制限）';
+        proBtn.textContent = _t('sub.pro_plan');
         proBtn.addEventListener('click', () => {
-          Chat.addMessage('Proにアップグレード', 'user');
+          Chat.addMessage(_t('sub.upgrade_to_pro'), 'user');
           subscribe();
         });
         suggestions.appendChild(proBtn);

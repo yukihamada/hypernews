@@ -26,6 +26,18 @@ const Storage = (() => {
     ecoCacheRate: 20,
     aiQuestionPrompt: '',
     aiAnswerPrompt: '',
+    articleGap: 8,
+    articlePadding: 12,
+    borderRadius: 12,
+    showSource: true,
+    showTime: true,
+    showTtsButton: true,
+    showBookmarkButton: true,
+    imageSize: 'medium',
+    lineHeight: 1.6,
+    descLines: 2,
+    contentMaxWidth: 1200,
+    lang: '',
   };
 
   function get(key) {
@@ -167,4 +179,63 @@ const ReadHistory = (() => {
   }
 
   return { init, markRead, isRead, getCount, clear };
+})();
+
+/**
+ * CloneVoices — Manage cloned voice profiles in localStorage
+ * Stores ref_audio (base64), ref_text, and name. Max 3 clones.
+ */
+const CloneVoices = (() => {
+  const STORAGE_KEY = 'hn_cloneVoices';
+  const MAX_CLONES = 3;
+  let items = {};
+
+  function init() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      items = raw ? JSON.parse(raw) : {};
+    } catch {
+      items = {};
+    }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch { /* quota exceeded */ }
+  }
+
+  function add(name, refAudio, refText) {
+    if (Object.keys(items).length >= MAX_CLONES) return null;
+    const id = 'cv_' + Date.now().toString(36);
+    items[id] = { name, refAudio, refText, created: Date.now() };
+    save();
+    return id;
+  }
+
+  function remove(id) {
+    delete items[id];
+    save();
+  }
+
+  function get(id) {
+    return items[id] || null;
+  }
+
+  function getAll() {
+    return Object.entries(items)
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.created - a.created);
+  }
+
+  function getCount() {
+    return Object.keys(items).length;
+  }
+
+  function clear() {
+    items = {};
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  }
+
+  return { init, add, remove, get, getAll, getCount, clear, MAX_CLONES };
 })();

@@ -1,7 +1,7 @@
 {
-  "name": "news.xyz - 超高速ニュース",
+  "name": "news.xyz - AI-Powered News",
   "short_name": "news.xyz",
-  "description": "パーソナライズなし超高速ニュースアグリゲーター",
+  "description": "AI-powered ultra-fast news aggregator",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",
@@ -26,5 +26,5 @@
     }
   ],
   "categories": ["news"],
-  "lang": "ja"
+  "lang": "en"
 }
