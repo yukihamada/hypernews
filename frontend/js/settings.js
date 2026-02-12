@@ -1,5 +1,5 @@
 /**
- * settings.js — Settings page logic
+ * settings.js — Settings page logic (v20 — modern redesign)
  */
 'use strict';
 
@@ -12,28 +12,34 @@
   }
 
   // --- Dark mode from storage ---
-  const mode = Storage.get('mode') || 'light';
-  document.body.dataset.mode = mode;
+  document.body.dataset.mode = Storage.get('mode') || 'light';
 
-  // --- Tab switching ---
+  // --- Tab switching (auto-select Display or from hash) ---
   const tabs = document.querySelectorAll('.tab-btn');
   const panels = document.querySelectorAll('.tab-panel');
+
+  function activateTab(name) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    panels.forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+    history.replaceState(null, '', '#' + name);
+  }
+
   tabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    });
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
   });
+
+  // Auto-select tab from URL hash or default to 'display'
+  const hashTab = location.hash.replace('#', '');
+  activateTab(hashTab && document.getElementById('tab-' + hashTab) ? hashTab : 'display');
 
   // --- Toast ---
   function toast(msg) {
+    document.querySelectorAll('.toast').forEach(t => t.remove());
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2500);
+    setTimeout(() => el.remove(), 2200);
   }
 
   // --- Admin secret ---
@@ -45,13 +51,66 @@
     loadFeeds();
   });
 
-  // === Tab 1: RSS Feeds ===
+  // --- Helpers ---
+  function setActive(groupId, value) {
+    const el = document.getElementById(groupId);
+    if (!el) return;
+    el.querySelectorAll('.opt-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.value === value);
+    });
+  }
+
+  function initToggle(id, key) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.setAttribute('aria-checked', String(!!Storage.get(key)));
+    btn.addEventListener('click', () => {
+      const next = btn.getAttribute('aria-checked') !== 'true';
+      btn.setAttribute('aria-checked', String(next));
+      Storage.set(key, next);
+      toast(`${key}: ${next ? 'ON' : 'OFF'}`);
+    });
+  }
+
+  function initSlider(rangeId, valId, key, suffix, transform) {
+    const range = document.getElementById(rangeId);
+    const valEl = document.getElementById(valId);
+    if (!range || !valEl) return;
+    const stored = Storage.get(key);
+    range.value = stored;
+    valEl.textContent = (transform ? transform(stored) : stored) + (suffix || '');
+    range.addEventListener('input', e => {
+      const raw = parseFloat(e.target.value);
+      const display = transform ? transform(raw) : raw;
+      valEl.textContent = display + (suffix || '');
+      Storage.set(key, raw);
+      updatePreview();
+    });
+  }
+
+  function initBtnGroup(groupId, key, opts) {
+    const val = String(Storage.get(key) ?? (opts && opts.default) || '');
+    setActive(groupId, val);
+    const el = document.getElementById(groupId);
+    if (!el) return;
+    el.addEventListener('click', e => {
+      const btn = e.target.closest('.opt-btn');
+      if (!btn) return;
+      const v = btn.dataset.value;
+      const parsed = opts && opts.int ? parseInt(v, 10) : v;
+      Storage.set(key, parsed);
+      setActive(groupId, v);
+      toast((opts && opts.label || key) + ': ' + btn.textContent.trim());
+      if (opts && opts.onChange) opts.onChange(parsed);
+      updatePreview();
+    });
+  }
+
+  // === RSS Feeds ===
   async function loadFeeds() {
     const list = document.getElementById('feeds-list');
     try {
-      const res = await fetch(`${BASE}/api/admin/feeds`, {
-        headers: { ...adminHeaders() },
-      });
+      const res = await fetch(`${BASE}/api/admin/feeds`, { headers: { ...adminHeaders() } });
       if (!res.ok) { list.innerHTML = '<div class="loading-text">Failed to load feeds</div>'; return; }
       const data = await res.json();
       if (!data.feeds || data.feeds.length === 0) {
@@ -68,12 +127,11 @@
             <div class="feed-url">${esc(feed.url)}</div>
           </div>
           <span class="feed-category">${esc(feed.category)}</span>
-          <button class="feed-toggle ${feed.enabled ? 'on' : 'off'}" data-id="${esc(feed.feed_id)}" title="${feed.enabled ? 'Enabled' : 'Disabled'}"></button>
-          <button class="feed-delete" data-id="${esc(feed.feed_id)}" title="Delete">&times;</button>
+          <button class="feed-toggle ${feed.enabled ? 'on' : 'off'}" data-id="${esc(feed.feed_id)}"></button>
+          <button class="feed-delete" data-id="${esc(feed.feed_id)}">&times;</button>
         `;
         list.appendChild(item);
       }
-      // Toggle handlers
       list.querySelectorAll('.feed-toggle').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
@@ -92,29 +150,20 @@
           } catch(e) { toast('Error: ' + e.message); }
         });
       });
-      // Delete handlers
       list.querySelectorAll('.feed-delete').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (!confirm('Delete this feed?')) return;
-          const id = btn.dataset.id;
           try {
-            const res = await fetch(`${BASE}/api/admin/feeds/${id}`, {
-              method: 'DELETE',
-              headers: { ...adminHeaders() },
+            const res = await fetch(`${BASE}/api/admin/feeds/${btn.dataset.id}`, {
+              method: 'DELETE', headers: { ...adminHeaders() },
             });
-            if (res.ok) {
-              btn.closest('.feed-item').remove();
-              toast('Feed deleted');
-            }
+            if (res.ok) { btn.closest('.feed-item').remove(); toast('Feed deleted'); }
           } catch(e) { toast('Error: ' + e.message); }
         });
       });
-    } catch(e) {
-      list.innerHTML = '<div class="loading-text">Error loading feeds</div>';
-    }
+    } catch { list.innerHTML = '<div class="loading-text">Error loading feeds</div>'; }
   }
 
-  // Add feed
   document.getElementById('feed-add-btn').addEventListener('click', async () => {
     const url = document.getElementById('feed-url').value.trim();
     const source = document.getElementById('feed-source').value.trim();
@@ -138,223 +187,169 @@
     } catch(e) { toast('Error: ' + e.message); }
   });
 
-  // === Tab 2: Local Data ===
+  // === Local Data ===
   function updateDataCounts() {
     ReadHistory.init();
     Bookmarks.init();
     document.getElementById('history-count').textContent = ReadHistory.getCount() + ' articles';
     document.getElementById('bookmark-count').textContent = Bookmarks.getCount() + ' items';
-
-    // EcoSystem cache count
     try {
       const eco = JSON.parse(localStorage.getItem('hn_eco') || '{}');
-      const cacheEntries = eco.queryCache ? Object.keys(eco.queryCache).length : 0;
-      document.getElementById('cache-count').textContent = cacheEntries + ' entries';
+      document.getElementById('cache-count').textContent = (eco.queryCache ? Object.keys(eco.queryCache).length : 0) + ' entries';
     } catch { document.getElementById('cache-count').textContent = '0 entries'; }
-
-    // Total storage size
     let total = 0;
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('hn_')) {
-        total += (localStorage.getItem(key) || '').length;
-      }
+      if (key && key.startsWith('hn_')) total += (localStorage.getItem(key) || '').length;
     }
     document.getElementById('storage-size').textContent = (total / 1024).toFixed(1) + ' KB';
   }
 
-  document.getElementById('clear-history').addEventListener('click', () => {
-    localStorage.removeItem('hn_readHistory');
-    toast('Read history cleared');
-    updateDataCounts();
-  });
-
-  document.getElementById('clear-bookmarks').addEventListener('click', () => {
-    localStorage.removeItem('hn_bookmarks');
-    toast('Bookmarks cleared');
-    updateDataCounts();
-  });
-
+  document.getElementById('clear-history').addEventListener('click', () => { localStorage.removeItem('hn_readHistory'); toast('Read history cleared'); updateDataCounts(); });
+  document.getElementById('clear-bookmarks').addEventListener('click', () => { localStorage.removeItem('hn_bookmarks'); toast('Bookmarks cleared'); updateDataCounts(); });
   document.getElementById('clear-cache').addEventListener('click', () => {
-    try {
-      const eco = JSON.parse(localStorage.getItem('hn_eco') || '{}');
-      eco.queryCache = {};
-      eco.cacheHits = 0;
-      localStorage.setItem('hn_eco', JSON.stringify(eco));
-    } catch {}
-    toast('AI cache cleared');
-    updateDataCounts();
+    try { const eco = JSON.parse(localStorage.getItem('hn_eco') || '{}'); eco.queryCache = {}; eco.cacheHits = 0; localStorage.setItem('hn_eco', JSON.stringify(eco)); } catch {}
+    toast('AI cache cleared'); updateDataCounts();
   });
-
   document.getElementById('clear-all').addEventListener('click', () => {
     if (!confirm('Reset all settings to defaults?')) return;
     const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hn_')) keys.push(key);
-    }
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('hn_')) keys.push(k); }
     keys.forEach(k => localStorage.removeItem(k));
     toast('All settings reset');
-    updateDataCounts();
-    setTimeout(() => location.reload(), 500);
+    setTimeout(() => location.reload(), 400);
   });
 
-  // --- Toggle helper ---
-  function initToggle(id, key) {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    const val = Storage.get(key);
-    btn.setAttribute('aria-checked', String(!!val));
-    btn.addEventListener('click', () => {
-      const current = btn.getAttribute('aria-checked') === 'true';
-      const next = !current;
-      btn.setAttribute('aria-checked', String(next));
-      Storage.set(key, next);
-      toast(`${key}: ${next ? 'ON' : 'OFF'}`);
-    });
-  }
+  // === Import / Export ===
+  document.getElementById('export-btn').addEventListener('click', () => {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hn_')) data[key] = localStorage.getItem(key);
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hypernews-settings.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Settings exported');
+  });
+
+  document.getElementById('import-btn').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+  document.getElementById('import-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        let count = 0;
+        for (const [key, val] of Object.entries(data)) {
+          if (key.startsWith('hn_')) { localStorage.setItem(key, val); count++; }
+        }
+        toast(`Imported ${count} settings`);
+        setTimeout(() => location.reload(), 400);
+      } catch { toast('Invalid settings file'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
 
   // === Display Tab ===
-  function initDisplayToggles() {
-    initToggle('toggle-showImages', 'showImages');
-    initToggle('toggle-showDescriptions', 'showDescriptions');
-    initToggle('toggle-hideReadArticles', 'hideReadArticles');
-    initToggle('toggle-enableAnimations', 'enableAnimations');
-  }
-
-  // === Reading Tab ===
-  function initReading() {
-    const perPage = String(Storage.get('articlesPerPage') || 30);
-    setActive('articles-per-page-btns', perPage);
-    document.getElementById('articles-per-page-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      const val = parseInt(btn.dataset.value, 10);
-      Storage.set('articlesPerPage', val);
-      setActive('articles-per-page-btns', btn.dataset.value);
-      toast('Articles per page: ' + val);
-    });
-
-    const delay = String(Storage.get('readMarkDelay'));
-    setActive('read-mark-btns', delay);
-    document.getElementById('read-mark-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      const val = parseInt(btn.dataset.value, 10);
-      Storage.set('readMarkDelay', val);
-      setActive('read-mark-btns', btn.dataset.value);
-      toast(val < 0 ? 'Read mark: OFF' : val === 0 ? 'Read mark: Instant' : `Read mark: ${val / 1000}s`);
-    });
-
-    const action = Storage.get('articleClickAction') || 'detail';
-    setActive('click-action-btns', action);
-    document.getElementById('click-action-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      Storage.set('articleClickAction', btn.dataset.value);
-      setActive('click-action-btns', btn.dataset.value);
-      toast('Click action: ' + btn.dataset.value);
-    });
-
-    initToggle('toggle-infiniteScroll', 'infiniteScroll');
-  }
-
-  // === Display Tab (existing) ===
   function initDisplay() {
-    const theme = Storage.get('theme') || 'card';
-    const currentMode = Storage.get('mode') || 'light';
-    const fontSize = Storage.get('fontSize') || 16;
-    const density = Storage.get('density') || 'normal';
+    initBtnGroup('theme-btns', 'theme', { label: 'Theme' });
+    initBtnGroup('mode-btns', 'mode', { label: 'Mode', onChange: v => { document.body.dataset.mode = v; } });
+    initBtnGroup('density-btns', 'density', { label: 'Density' });
+    initBtnGroup('refresh-btns', 'autoRefresh', { label: 'Auto refresh', int: true });
+
+    initSlider('font-size-range', 'font-size-val', 'fontSize', 'px', v => Math.round(v));
+    initSlider('line-height-range', 'line-height-val', 'lineHeight', '', v => v.toFixed(1));
+
+    // Colors
     const accentColor = Storage.get('accentColor') || 'default';
-    const autoRefresh = Storage.get('autoRefresh') || 0;
-
-    setActive('theme-btns', theme);
-    setActive('mode-btns', currentMode);
-    setActive('density-btns', density);
-    setActive('refresh-btns', String(autoRefresh));
-
-    document.getElementById('font-size-range').value = fontSize;
-    document.getElementById('font-size-val').textContent = fontSize + 'px';
-
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.value === accentColor);
     });
-
-    // Theme buttons
-    document.getElementById('theme-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      Storage.set('theme', btn.dataset.value);
-      setActive('theme-btns', btn.dataset.value);
-      toast('Theme: ' + btn.dataset.value);
-    });
-
-    // Mode buttons
-    document.getElementById('mode-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      Storage.set('mode', btn.dataset.value);
-      document.body.dataset.mode = btn.dataset.value;
-      setActive('mode-btns', btn.dataset.value);
-      toast('Mode: ' + btn.dataset.value);
-    });
-
-    // Font size
-    document.getElementById('font-size-range').addEventListener('input', e => {
-      const val = parseInt(e.target.value, 10);
-      document.getElementById('font-size-val').textContent = val + 'px';
-      Storage.set('fontSize', val);
-    });
-
-    // Density
-    document.getElementById('density-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      Storage.set('density', btn.dataset.value);
-      setActive('density-btns', btn.dataset.value);
-      toast('Density: ' + btn.dataset.value);
-    });
-
-    // Colors
     document.getElementById('color-btns').addEventListener('click', e => {
       const btn = e.target.closest('.color-btn');
       if (!btn) return;
       Storage.set('accentColor', btn.dataset.value);
       document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      toast('Accent color: ' + btn.dataset.value);
-    });
-
-    // Auto refresh
-    document.getElementById('refresh-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      const val = parseInt(btn.dataset.value, 10);
-      Storage.set('autoRefresh', val);
-      setActive('refresh-btns', btn.dataset.value);
-      toast(val > 0 ? `Auto refresh: ${val} min` : 'Auto refresh: OFF');
+      toast('Accent: ' + btn.title);
     });
   }
 
-  function setActive(groupId, value) {
-    document.getElementById(groupId).querySelectorAll('.opt-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.value === value);
+  function initDisplayToggles() {
+    initToggle('toggle-showImages', 'showImages');
+    initToggle('toggle-showDescriptions', 'showDescriptions');
+    initToggle('toggle-hideReadArticles', 'hideReadArticles');
+    initToggle('toggle-enableAnimations', 'enableAnimations');
+    initToggle('toggle-showSource', 'showSource');
+    initToggle('toggle-showTime', 'showTime');
+    initToggle('toggle-showTtsButton', 'showTtsButton');
+    initToggle('toggle-showBookmarkButton', 'showBookmarkButton');
+  }
+
+  // === Layout Tab ===
+  function initLayout() {
+    initSlider('article-gap-range', 'article-gap-val', 'articleGap', 'px', v => Math.round(v));
+    initSlider('article-padding-range', 'article-padding-val', 'articlePadding', 'px', v => Math.round(v));
+    initSlider('border-radius-range', 'border-radius-val', 'borderRadius', 'px', v => Math.round(v));
+
+    initBtnGroup('image-size-btns', 'imageSize', { label: 'Image size' });
+    initBtnGroup('desc-lines-btns', 'descLines', { label: 'Desc lines', int: true });
+    initBtnGroup('max-width-btns', 'contentMaxWidth', { label: 'Max width', int: true });
+
+    updatePreview();
+  }
+
+  // === Live Preview ===
+  function updatePreview() {
+    const container = document.getElementById('preview-articles');
+    if (!container) return;
+    const gap = Storage.get('articleGap');
+    const pad = Storage.get('articlePadding');
+    const radius = Storage.get('borderRadius');
+    const imgSize = Storage.get('imageSize');
+
+    container.style.gap = gap + 'px';
+    container.querySelectorAll('.preview-article').forEach(a => {
+      a.style.padding = pad + 'px';
+      a.style.borderRadius = radius + 'px';
+      a.style.gap = Math.max(4, pad * 0.5) + 'px';
     });
+    const imgW = imgSize === 'none' ? 0 : imgSize === 'small' ? 40 : imgSize === 'large' ? 90 : 60;
+    const imgH = Math.round(imgW * 0.67);
+    container.querySelectorAll('.preview-img').forEach(img => {
+      img.style.display = imgSize === 'none' ? 'none' : 'block';
+      img.style.width = imgW + 'px';
+      img.style.height = imgH + 'px';
+      img.style.borderRadius = Math.max(0, radius - 3) + 'px';
+    });
+  }
+
+  // === Reading Tab ===
+  function initReading() {
+    initBtnGroup('articles-per-page-btns', 'articlesPerPage', { label: 'Per page', int: true });
+    initBtnGroup('click-action-btns', 'articleClickAction', { label: 'Click action' });
+    initBtnGroup('read-mark-btns', 'readMarkDelay', { label: 'Read mark', int: true });
+    initToggle('toggle-infiniteScroll', 'infiniteScroll');
   }
 
   // === AI & Voice Tab ===
   function initAI() {
-    const qPrompt = Storage.get('aiQuestionPrompt') || '';
-    const aPrompt = Storage.get('aiAnswerPrompt') || '';
-    document.getElementById('ai-question-prompt').value = qPrompt;
-    document.getElementById('ai-answer-prompt').value = aPrompt;
+    document.getElementById('ai-question-prompt').value = Storage.get('aiQuestionPrompt') || '';
+    document.getElementById('ai-answer-prompt').value = Storage.get('aiAnswerPrompt') || '';
 
     document.getElementById('ai-save-btn').addEventListener('click', () => {
       Storage.set('aiQuestionPrompt', document.getElementById('ai-question-prompt').value);
       Storage.set('aiAnswerPrompt', document.getElementById('ai-answer-prompt').value);
       toast('AI prompts saved');
     });
-
     document.getElementById('ai-clear-btn').addEventListener('click', () => {
       document.getElementById('ai-question-prompt').value = '';
       document.getElementById('ai-answer-prompt').value = '';
@@ -363,48 +358,26 @@
       toast('AI prompts cleared');
     });
 
-    // Typewriter speed
-    const twSpeed = String(Storage.get('typewriterSpeed'));
-    setActive('typewriter-btns', twSpeed);
-    document.getElementById('typewriter-btns').addEventListener('click', e => {
-      const btn = e.target.closest('.opt-btn');
-      if (!btn) return;
-      const val = parseInt(btn.dataset.value, 10);
-      Storage.set('typewriterSpeed', val);
-      setActive('typewriter-btns', btn.dataset.value);
-      toast(val === 0 ? 'Typewriter: OFF' : `Typewriter: ${val}ms`);
-    });
-
-    // TTS Voice picker
+    initBtnGroup('typewriter-btns', 'typewriterSpeed', { label: 'Typewriter', int: true });
     loadVoicePicker();
 
     // EcoSystem Cache Rate
-    const cacheRate = Storage.get('ecoCacheRate');
-    const rateRange = document.getElementById('cache-rate-range');
-    const rateVal = document.getElementById('cache-rate-val');
-    rateRange.value = cacheRate;
-    rateVal.textContent = cacheRate + '%';
-    rateRange.addEventListener('input', e => {
-      const val = parseInt(e.target.value, 10);
-      rateVal.textContent = val + '%';
-      Storage.set('ecoCacheRate', val);
-      if (typeof EcoSystem !== 'undefined' && EcoSystem.setCacheRate) {
-        EcoSystem.setCacheRate(val);
-      }
-    });
+    initSlider('cache-rate-range', 'cache-rate-val', 'ecoCacheRate', '%', v => Math.round(v));
+
+    // Voice Clone
+    CloneVoices.init();
+    initVoiceClone();
   }
 
   async function loadVoicePicker() {
     const container = document.getElementById('tts-voice-btns');
     const hint = document.getElementById('tts-voice-hint');
     const currentVoice = Storage.get('ttsVoice') || 'off';
-
     try {
       const res = await fetch(`${BASE}/api/tts/voices`);
-      if (!res.ok) throw new Error('Failed to load voices');
+      if (!res.ok) throw new Error('fail');
       const data = await res.json();
       const voices = data.voices || [];
-
       container.innerHTML = '<button class="opt-btn" data-value="off">OFF</button>';
       for (const v of voices) {
         const btn = document.createElement('button');
@@ -415,28 +388,225 @@
       }
       setActive('tts-voice-btns', currentVoice);
       hint.textContent = voices.length > 0 ? '' : 'No voices available';
-
-      container.addEventListener('click', e => {
-        const btn = e.target.closest('.opt-btn');
-        if (!btn) return;
-        Storage.set('ttsVoice', btn.dataset.value);
-        setActive('tts-voice-btns', btn.dataset.value);
-        toast('TTS Voice: ' + (btn.dataset.value === 'off' ? 'OFF' : btn.textContent));
-      });
     } catch {
       hint.textContent = 'Could not load voices';
       setActive('tts-voice-btns', currentVoice);
-      container.addEventListener('click', e => {
-        const btn = e.target.closest('.opt-btn');
-        if (!btn) return;
-        Storage.set('ttsVoice', btn.dataset.value);
-        setActive('tts-voice-btns', btn.dataset.value);
-        toast('TTS Voice: OFF');
+    }
+    container.addEventListener('click', e => {
+      const btn = e.target.closest('.opt-btn');
+      if (!btn) return;
+      Storage.set('ttsVoice', btn.dataset.value);
+      setActive('tts-voice-btns', btn.dataset.value);
+      toast('TTS Voice: ' + (btn.dataset.value === 'off' ? 'OFF' : btn.textContent));
+    });
+  }
+
+  function initVoiceClone() {
+    const list = document.getElementById('clone-list');
+    const form = document.getElementById('clone-form');
+    const newBtn = document.getElementById('clone-new-btn');
+    const recBtn = document.getElementById('clone-rec-btn');
+    const recStatus = document.getElementById('clone-rec-status');
+    const recTimeEl = document.getElementById('clone-rec-time');
+    const recStopBtn = document.getElementById('clone-rec-stop');
+    const fileInput = document.getElementById('clone-file');
+    const audioPreview = document.getElementById('clone-audio-preview');
+    const saveBtn = document.getElementById('clone-save-btn');
+    const cancelBtn = document.getElementById('clone-cancel-btn');
+    const countEl = document.getElementById('clone-count');
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recTimer = null;
+    let recStartTime = 0;
+    let currentAudioBase64 = null;
+
+    renderCloneList();
+
+    newBtn.addEventListener('click', () => {
+      if (CloneVoices.getCount() >= CloneVoices.MAX_CLONES) {
+        toast('クローン上限(' + CloneVoices.MAX_CLONES + '件)に達しています');
+        return;
+      }
+      form.hidden = !form.hidden;
+      if (!form.hidden) resetForm();
+    });
+
+    recBtn.addEventListener('click', async () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '' });
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          processAudioBlob(blob);
+          recBtn.classList.remove('recording');
+          recStatus.hidden = true;
+          clearInterval(recTimer);
+        };
+        mediaRecorder.start();
+        recBtn.classList.add('recording');
+        recStatus.hidden = false;
+        recStartTime = Date.now();
+        recTimer = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - recStartTime) / 1000);
+          recTimeEl.textContent = Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0');
+        }, 200);
+      } catch {
+        toast('マイクのアクセスが許可されていません');
+      }
+    });
+
+    recStopBtn.addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    });
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) { toast('ファイルが大きすぎます (5MB以下)'); return; }
+      processAudioBlob(file);
+      e.target.value = '';
+    });
+
+    function processAudioBlob(blob) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        // Strip data URL prefix to get raw base64
+        currentAudioBase64 = dataUrl.split(',')[1] || dataUrl;
+        audioPreview.src = dataUrl;
+        audioPreview.hidden = false;
+        updateSaveBtn();
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    function updateSaveBtn() {
+      const name = document.getElementById('clone-name').value.trim();
+      const refText = document.getElementById('clone-ref-text').value.trim();
+      saveBtn.disabled = !(name && currentAudioBase64 && refText);
+    }
+
+    document.getElementById('clone-name').addEventListener('input', updateSaveBtn);
+    document.getElementById('clone-ref-text').addEventListener('input', updateSaveBtn);
+
+    saveBtn.addEventListener('click', () => {
+      const name = document.getElementById('clone-name').value.trim();
+      const refText = document.getElementById('clone-ref-text').value.trim();
+      if (!name || !currentAudioBase64 || !refText) { toast('全項目を入力してください'); return; }
+      const id = CloneVoices.add(name, currentAudioBase64, refText);
+      if (!id) { toast('クローン上限(' + CloneVoices.MAX_CLONES + '件)に達しています'); return; }
+      renderCloneList();
+      form.hidden = true;
+      toast('ボイス「' + name + '」を保存しました');
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      form.hidden = true;
+      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    });
+
+    function resetForm() {
+      document.getElementById('clone-name').value = '';
+      document.getElementById('clone-ref-text').value = '';
+      currentAudioBase64 = null;
+      audioPreview.hidden = true;
+      audioPreview.src = '';
+      saveBtn.disabled = true;
+      recBtn.classList.remove('recording');
+      recStatus.hidden = true;
+      clearInterval(recTimer);
+      countEl.textContent = CloneVoices.getCount();
+    }
+
+    function renderCloneList() {
+      const clones = CloneVoices.getAll();
+      if (clones.length === 0) {
+        list.innerHTML = '<p class="clone-empty">クローンボイスはまだありません</p>';
+      } else {
+        list.innerHTML = clones.map(c => `
+          <div class="clone-card" data-id="${esc(c.id)}">
+            <span class="clone-card-name">${esc(c.name)}</span>
+            <div class="clone-card-actions">
+              <button class="btn-secondary clone-test-btn" title="テスト再生">▶</button>
+              <button class="btn-secondary clone-use-btn" title="このボイスを使用">使用</button>
+              <button class="btn-secondary clone-del-btn" title="削除">✕</button>
+            </div>
+          </div>
+        `).join('');
+      }
+      countEl.textContent = CloneVoices.getCount();
+
+      // Hide new button when at limit
+      newBtn.style.display = CloneVoices.getCount() >= CloneVoices.MAX_CLONES ? 'none' : '';
+
+      // Event delegation for clone cards
+      list.querySelectorAll('.clone-test-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('.clone-card');
+          const id = card.dataset.id;
+          const clone = CloneVoices.get(id);
+          if (!clone) return;
+          btn.disabled = true;
+          btn.textContent = '…';
+          try {
+            const auth = typeof Subscription !== 'undefined' ? Subscription.authHeaders() : {};
+            const res = await fetch('/api/tts/clone', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...auth },
+              body: JSON.stringify({ text: 'これはテスト再生です。ボイスクローンの音声をお楽しみください。', ref_audio: clone.refAudio, ref_text: clone.refText, language: 'Japanese' }),
+            });
+            if (!res.ok) throw new Error('TTS error');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.onended = () => URL.revokeObjectURL(url);
+            audio.play();
+          } catch {
+            toast('テスト再生に失敗しました');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = '▶';
+          }
+        });
+      });
+
+      list.querySelectorAll('.clone-use-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.clone-card');
+          const id = card.dataset.id;
+          const clone = CloneVoices.get(id);
+          if (!clone) return;
+          Storage.set('ttsVoice', 'clone:' + id);
+          setActive('tts-voice-btns', 'clone:' + id);
+          toast('ボイス「' + clone.name + '」を使用中');
+        });
+      });
+
+      list.querySelectorAll('.clone-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.clone-card');
+          const id = card.dataset.id;
+          const clone = CloneVoices.get(id);
+          if (!clone) return;
+          if (!confirm('「' + clone.name + '」を削除しますか？')) return;
+          // If currently using this voice, reset to off
+          if (Storage.get('ttsVoice') === 'clone:' + id) {
+            Storage.set('ttsVoice', 'off');
+            setActive('tts-voice-btns', 'off');
+          }
+          CloneVoices.remove(id);
+          renderCloneList();
+          toast('ボイスを削除しました');
+        });
       });
     }
   }
 
-  // --- Utility ---
   function esc(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
@@ -448,6 +618,7 @@
   updateDataCounts();
   initDisplay();
   initDisplayToggles();
+  initLayout();
   initReading();
   initAI();
 })();

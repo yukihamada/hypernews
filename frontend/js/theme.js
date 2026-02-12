@@ -33,6 +33,23 @@ const Theme = (() => {
     document.body.setAttribute('data-animations', String(Storage.get('enableAnimations')));
     document.documentElement.style.setProperty('--font-size', fontSize + 'px');
 
+    // Custom spacing via CSS custom properties
+    document.documentElement.style.setProperty('--article-gap', Storage.get('articleGap') + 'px');
+    document.documentElement.style.setProperty('--article-padding', Storage.get('articlePadding') + 'px');
+    document.documentElement.style.setProperty('--radius', Storage.get('borderRadius') + 'px');
+
+    // Element visibility via data attributes
+    document.body.setAttribute('data-show-source', String(Storage.get('showSource')));
+    document.body.setAttribute('data-show-time', String(Storage.get('showTime')));
+    document.body.setAttribute('data-show-tts-btn', String(Storage.get('showTtsButton')));
+    document.body.setAttribute('data-show-bookmark-btn', String(Storage.get('showBookmarkButton')));
+    document.body.setAttribute('data-image-size', Storage.get('imageSize'));
+
+    // Line height & description lines & content max width
+    document.documentElement.style.setProperty('--line-height', String(Storage.get('lineHeight')));
+    document.documentElement.style.setProperty('--desc-lines', String(Storage.get('descLines')));
+    document.documentElement.style.setProperty('--content-max-width', Storage.get('contentMaxWidth') + 'px');
+
     // Apply accent color
     const preset = ACCENT_PRESETS[accentColor] || ACCENT_PRESETS.default;
     if (accentColor !== 'default') {
