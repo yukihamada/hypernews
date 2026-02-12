@@ -111,6 +111,12 @@ body {
   overscroll-behavior: contain;
 }
 
+/* Push messages to bottom when content is short */
+.cn-messages::before {
+  content: '';
+  flex: 1;
+}
+
 .cn-messages::-webkit-scrollbar {
   width: 4px;
 }
@@ -188,6 +194,18 @@ body {
 .cn-bubble a {
   color: #93c5fd;
   text-decoration: underline;
+}
+
+/* Rich formatting inside AI bubbles */
+.cn-bubble--ai ul, .cn-bubble--ai ol {
+  margin: 4px 0;
+  padding-left: 1.2em;
+}
+.cn-bubble--ai li {
+  margin: 2px 0;
+}
+.cn-bubble--ai strong {
+  font-weight: 700;
 }
 
 .cn-bubble--user a {
@@ -507,11 +525,25 @@ body {
     width: 100%;
   }
 
+  .cn-article-card {
+    max-width: 440px;
+  }
+
+  .cn-article-cards {
+    max-width: 440px;
+  }
+
   .cn-chips {
     max-width: 680px;
     margin: 0 auto;
     width: 100%;
     justify-content: center;
+  }
+
+  .cn-input-bar {
+    max-width: 680px;
+    margin: 0 auto;
+    width: 100%;
   }
 }
 

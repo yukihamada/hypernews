@@ -72,7 +72,6 @@ pub async fn run(db: Arc<Db>, http_client: reqwest::Client) {
 
 async fn fetch_cycle(db: &Db, http_client: &reqwest::Client) {
     let feeds = load_feeds(db);
-    let features = db.get_feature_flags().unwrap_or_default();
 
     let feeds_config = FeedsConfig { feeds };
     let articles = fetch_all_feeds(http_client, &feeds_config).await;
@@ -83,12 +82,12 @@ async fn fetch_cycle(db: &Db, http_client: &reqwest::Client) {
         Err(e) => warn!(error = %e, "Failed to store articles"),
     }
 
-    // OGP enrichment
-    if features.ogp_enrichment_enabled {
-        let no_image = match db.articles_without_image(20) {
-            Ok(a) => a,
-            Err(_) => return,
-        };
+    // OGP enrichment — always run to ensure articles have images
+    let no_image = match db.articles_without_image(50) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+    if !no_image.is_empty() {
         let mut ogp_count = 0;
         for article in &no_image {
             if let Some(img_url) = ogp::fetch_og_image(http_client, &article.url).await {
@@ -98,7 +97,7 @@ async fn fetch_cycle(db: &Db, http_client: &reqwest::Client) {
             }
         }
         if ogp_count > 0 {
-            info!(ogp_enriched = ogp_count, "OGP enrichment complete");
+            info!(ogp_enriched = ogp_count, total_checked = no_image.len(), "OGP enrichment complete");
         }
     }
 }

@@ -29,16 +29,11 @@ const Renderer = (() => {
     el.dataset.category = article.category;
     el.dataset.articleId = article.id || '';
 
-    let imgHtml = '';
-    if (article.image_url) {
-      imgHtml = `<img class="article-img" src="${escHtml(article.image_url)}" alt="${escHtml(article.title)}" loading="lazy" decoding="async">`;
-    } else {
-      const catLabel = article.category || '';
-      imgHtml = `<div class="article-img article-img-placeholder" data-category="${escHtml(catLabel)}"><span>${escHtml(catLabel)}</span></div>`;
-    }
+    const catLabel = article.category || '';
 
-    const descHtml = article.description
-      ? `<p class="article-desc">${escHtml(article.description)}</p>`
+    const cleanDesc = stripHtml(article.description);
+    const descHtml = cleanDesc
+      ? `<p class="article-desc">${escHtml(cleanDesc)}</p>`
       : '';
 
     const groupBadge =
@@ -47,7 +42,6 @@ const Renderer = (() => {
         : '';
 
     el.innerHTML = `
-      ${imgHtml}
       <div class="article-body">
         <h2 class="article-title"><a href="${escHtml(article.url)}" target="_blank" rel="noopener">${escHtml(article.title)}</a>${groupBadge}</h2>
         <div class="article-meta">
@@ -112,7 +106,6 @@ const Renderer = (() => {
       const el = document.createElement('div');
       el.className = 'skeleton';
       el.innerHTML = `
-        <div class="skeleton-img"></div>
         <div class="skeleton-body">
           <div class="skeleton-line w80"></div>
           <div class="skeleton-line w60"></div>
@@ -128,5 +121,10 @@ const Renderer = (() => {
     return div.innerHTML;
   }
 
-  return { render, renderCategories, renderSkeletons, relativeTime, escHtml };
+  function stripHtml(str) {
+    if (!str) return '';
+    return str.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  return { render, renderCategories, renderSkeletons, relativeTime, escHtml, stripHtml };
 })();

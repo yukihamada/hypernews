@@ -44,6 +44,7 @@ pub struct AppState {
     pub stripe_price_id: String,
     pub admin_secret: String,
     pub base_url: String,
+    pub google_client_id: String,
 }
 
 /// Check admin auth. Returns error response if unauthorized.
@@ -71,23 +72,38 @@ fn check_admin_auth(headers: &HeaderMap, state: &AppState) -> Result<(), Respons
 pub enum UserTier {
     Anonymous,
     Free { device_id: String },
+    Authenticated { device_id: String, user_id: String },
     Pro,
 }
 
 fn extract_user_tier(headers: &HeaderMap, db: &Db) -> UserTier {
-    // Check for Pro token first
+    // Check for Bearer token first (Pro or Google auth)
     if let Some(auth) = headers.get("authorization") {
         if let Ok(val) = auth.to_str() {
             if let Some(token) = val.strip_prefix("Bearer ") {
+                // Check Pro (Stripe) token
                 if let Ok(Some((_, _, status, period_end))) = db.get_subscription_by_token(token) {
                     if status == "active" {
-                        // Check if period hasn't expired
                         if let Ok(end) = period_end.parse::<chrono::DateTime<chrono::Utc>>() {
                             if end > chrono::Utc::now() {
                                 return UserTier::Pro;
                             }
                         }
                     }
+                }
+                // Check Google auth token
+                if let Ok(Some((user_id, _, _, _, device_id_opt, _))) =
+                    db.get_user_by_auth_token(token)
+                {
+                    let device_id = device_id_opt
+                        .or_else(|| {
+                            headers
+                                .get("x-device-id")
+                                .and_then(|v| v.to_str().ok())
+                                .map(|s| s.to_string())
+                        })
+                        .unwrap_or_default();
+                    return UserTier::Authenticated { device_id, user_id };
                 }
             }
         }
@@ -119,6 +135,7 @@ const FEATURE_LIMITS: &[FeatureLimit] = &[
     FeatureLimit { name: "tts", daily_limit: 30 },
     FeatureLimit { name: "to_reading", daily_limit: 30 },
     FeatureLimit { name: "podcast", daily_limit: 10 },
+    FeatureLimit { name: "murmur", daily_limit: 50 },
 ];
 
 fn get_daily_limit(feature: &str) -> i64 {
@@ -136,6 +153,28 @@ fn check_rate_limit(
 ) -> Result<(), Response> {
     match tier {
         UserTier::Pro => Ok(()),
+        UserTier::Authenticated { device_id, .. } => {
+            let base_limit = get_daily_limit(feature);
+            let limit = base_limit * 2;
+            let used = db.get_usage(device_id, feature).unwrap_or(0);
+            if used >= limit {
+                Err((
+                    StatusCode::PAYMENT_REQUIRED,
+                    Json(serde_json::json!({
+                        "error": "rate_limit_exceeded",
+                        "message": format!("本日の利用回数（{}回）に達しました。Proプラン（¥500/月）で無制限にご利用いただけます。", limit),
+                        "feature": feature,
+                        "limit": limit,
+                        "used": used,
+                        "tier": "authenticated",
+                        "upgrade_url": "/pro"
+                    })),
+                )
+                    .into_response())
+            } else {
+                Ok(())
+            }
+        }
         UserTier::Free { device_id } => {
             let limit = get_daily_limit(feature);
             let used = db.get_usage(device_id, feature).unwrap_or(0);
@@ -144,10 +183,11 @@ fn check_rate_limit(
                     StatusCode::PAYMENT_REQUIRED,
                     Json(serde_json::json!({
                         "error": "rate_limit_exceeded",
-                        "message": format!("本日の利用回数（{}回）に達しました。明日リセットされます。", limit),
+                        "message": format!("本日の利用回数（{}回）に達しました。Googleログインで制限が2倍に！", limit),
                         "feature": feature,
                         "limit": limit,
                         "used": used,
+                        "tier": "free",
                         "upgrade_url": "/pro"
                     })),
                 )
@@ -161,7 +201,8 @@ fn check_rate_limit(
                 StatusCode::PAYMENT_REQUIRED,
                 Json(serde_json::json!({
                     "error": "device_id_required",
-                    "message": "AI機能を利用するにはデバイスIDが必要です。"
+                    "message": "AI機能を利用するにはデバイスIDが必要です。",
+                    "tier": "anonymous"
                 })),
             )
                 .into_response())
@@ -169,9 +210,12 @@ fn check_rate_limit(
     }
 }
 
-fn increment_if_free(db: &Db, tier: &UserTier, feature: &str) {
-    if let UserTier::Free { device_id } = tier {
-        let _ = db.increment_usage(device_id, feature);
+fn increment_usage_if_needed(db: &Db, tier: &UserTier, feature: &str) {
+    match tier {
+        UserTier::Free { device_id } | UserTier::Authenticated { device_id, .. } => {
+            let _ = db.increment_usage(device_id, feature);
+        }
+        _ => {}
     }
 }
 
@@ -498,7 +542,7 @@ pub async fn handle_summarize(
         .await
     {
         Ok(summary) => {
-            increment_if_free(&state.db, &tier, "summarize");
+            increment_usage_if_needed(&state.db, &tier, "summarize");
 
             // Convert to reading for TTS
             let reading = claude::convert_to_reading(
@@ -564,7 +608,7 @@ pub async fn handle_to_reading(
 
     match claude::convert_to_reading(&state.http_client, &state.api_key, text).await {
         Ok(reading) => {
-            increment_if_free(&state.db, &tier, "to_reading");
+            increment_usage_if_needed(&state.db, &tier, "to_reading");
             (
                 StatusCode::OK,
                 Json(serde_json::json!({"reading": reading})),
@@ -782,7 +826,7 @@ pub async fn handle_podcast_generate(
         }
     }
 
-    increment_if_free(&state.db, &tier, "podcast");
+    increment_usage_if_needed(&state.db, &tier, "podcast");
 
     let resp_json = serde_json::json!({
         "dialogue": dialogue,
@@ -840,6 +884,104 @@ pub async fn get_feed(
                 .into_response()
         }
     }
+}
+
+// --- Murmur (AI つぶやき) API ---
+
+#[derive(Deserialize)]
+pub struct MurmurGenerateRequest {
+    pub title: String,
+    pub description: String,
+    pub source: String,
+    pub article_id: Option<String>,
+}
+
+pub async fn handle_murmur_generate(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<MurmurGenerateRequest>,
+) -> Response {
+    let tier = extract_user_tier(&headers, &state.db);
+    if let Err(resp) = check_rate_limit(&state.db, &tier, "murmur") {
+        return resp;
+    }
+
+    if state.api_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "APIキーが設定されていません"})),
+        )
+            .into_response();
+    }
+
+    // Cache check (6h TTL)
+    let ckey = cache_key("murmur", &format!("{}|{}", body.title, body.source));
+    if let Ok(Some(cached)) = state.db.get_cache(&ckey) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&cached) {
+            return (StatusCode::OK, Json(val)).into_response();
+        }
+    }
+
+    // Generate murmur text via Claude Haiku
+    let murmur_text = match claude::generate_murmur(
+        &state.http_client,
+        &state.api_key,
+        &body.title,
+        &body.description,
+        &body.source,
+    )
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(error = %e, "Murmur generation failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "つぶやきの生成に失敗しました"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Generate TTS via Qwen-TTS (Japanese voice)
+    let audio_base64 = if !state.qwen_tts_endpoint_id.is_empty() && !state.runpod_api_key.is_empty() {
+        let input = serde_json::json!({
+            "text": murmur_text,
+            "language": "Japanese",
+        });
+        match tokio::time::timeout(
+            Duration::from_secs(90),
+            runpod_runsync(&state, &state.qwen_tts_endpoint_id, input),
+        )
+        .await
+        {
+            Ok(Ok(output)) => {
+                output["audio_base64"].as_str().unwrap_or("").to_string()
+            }
+            Ok(Err(e)) => {
+                warn!(error = %e, "Murmur TTS failed");
+                String::new()
+            }
+            Err(_) => {
+                warn!("Murmur TTS timed out");
+                String::new()
+            }
+        }
+    } else {
+        String::new()
+    };
+
+    increment_usage_if_needed(&state.db, &tier, "murmur");
+
+    let result = serde_json::json!({
+        "text": murmur_text,
+        "audio_base64": audio_base64,
+    });
+
+    // Cache for 6 hours
+    let _ = state.db.set_cache(&ckey, "murmur", &result.to_string(), 6 * 3600);
+
+    (StatusCode::OK, Json(result)).into_response()
 }
 
 // --- Category Management API ---
@@ -1068,7 +1210,7 @@ pub async fn handle_article_questions(
     .await
     {
         Ok(questions) => {
-            increment_if_free(&state.db, &tier, "questions");
+            increment_usage_if_needed(&state.db, &tier, "questions");
             let resp_json = serde_json::json!({"questions": questions});
             let _ = state.db.set_cache(&ckey, "questions", &resp_json.to_string(), 21600); // 6h
             (StatusCode::OK, Json(resp_json)).into_response()
@@ -1135,7 +1277,7 @@ pub async fn handle_article_ask(
     .await
     {
         Ok(answer) => {
-            increment_if_free(&state.db, &tier, "ask");
+            increment_usage_if_needed(&state.db, &tier, "ask");
             let resp_json = serde_json::json!({"answer": answer});
             let _ = state.db.set_cache(&ckey, "ask", &resp_json.to_string(), 21600); // 6h
             (StatusCode::OK, Json(resp_json)).into_response()
@@ -1561,7 +1703,7 @@ pub async fn handle_tts(
     let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &audio_bytes);
     let _ = state.db.set_cache(&audio_ckey, "tts_audio", &b64, 21600);
 
-    increment_if_free(&state.db, &tier, "tts");
+    increment_usage_if_needed(&state.db, &tier, "tts");
     audio_response(audio_bytes)
 }
 
@@ -1600,7 +1742,7 @@ pub async fn handle_tts_clone(
         Ok(Ok(output)) => {
             match decode_runpod_audio(&output) {
                 Ok(bytes) => {
-                    increment_if_free(&state.db, &tier, "tts");
+                    increment_usage_if_needed(&state.db, &tier, "tts");
                     audio_response(bytes)
                 }
                 Err(e) => (
@@ -2569,6 +2711,26 @@ pub async fn handle_usage(
             )
                 .into_response()
         }
+        UserTier::Authenticated { device_id, .. } => {
+            let usage = state.db.get_all_usage(&device_id).unwrap_or_default();
+            let usage_map: serde_json::Map<String, serde_json::Value> = usage
+                .into_iter()
+                .map(|(f, c)| (f, serde_json::json!(c)))
+                .collect();
+            let limits_map: serde_json::Map<String, serde_json::Value> = FEATURE_LIMITS
+                .iter()
+                .map(|f| (f.name.to_string(), serde_json::json!(f.daily_limit * 2)))
+                .collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "tier": "authenticated",
+                    "usage": usage_map,
+                    "limits": limits_map
+                })),
+            )
+                .into_response()
+        }
         UserTier::Free { device_id } => {
             let usage = state.db.get_all_usage(&device_id).unwrap_or_default();
             let usage_map: serde_json::Map<String, serde_json::Value> = usage
@@ -2605,6 +2767,173 @@ pub async fn handle_usage(
                 .into_response()
         }
     }
+}
+
+// --- Google Auth endpoint ---
+
+#[derive(Deserialize)]
+pub struct GoogleAuthRequest {
+    pub id_token: String,
+    pub device_id: Option<String>,
+}
+
+pub async fn handle_google_auth(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<GoogleAuthRequest>,
+) -> Response {
+    if state.google_client_id.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Google認証は設定されていません"})),
+        )
+            .into_response();
+    }
+
+    // Verify the ID token with Google's tokeninfo endpoint
+    let verify_url = format!(
+        "https://oauth2.googleapis.com/tokeninfo?id_token={}",
+        body.id_token
+    );
+    let resp = match state.http_client.get(&verify_url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(error = %e, "Google token verification request failed");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({"error": "Google認証サーバーに接続できません"})),
+            )
+                .into_response();
+        }
+    };
+
+    if !resp.status().is_success() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "無効なGoogleトークンです"})),
+        )
+            .into_response();
+    }
+
+    let token_info: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({"error": "Google認証レスポンスの解析に失敗しました"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Verify audience matches our client ID
+    let aud = token_info["aud"].as_str().unwrap_or("");
+    if aud != state.google_client_id {
+        warn!(expected = %state.google_client_id, got = %aud, "Google token audience mismatch");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "トークンのaudience が一致しません"})),
+        )
+            .into_response();
+    }
+
+    let google_id = match token_info["sub"].as_str() {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Google IDが取得できません"})),
+            )
+                .into_response();
+        }
+    };
+
+    let email = token_info["email"].as_str().unwrap_or("");
+    let name = token_info["name"].as_str().unwrap_or("");
+    let picture = token_info["picture"].as_str();
+
+    match state
+        .db
+        .upsert_user(google_id, email, name, picture, body.device_id.as_deref())
+    {
+        Ok((auth_token, user_id, is_new)) => {
+            info!(user_id = %user_id, email = %email, is_new = %is_new, "Google auth successful");
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "auth_token": auth_token,
+                    "user": {
+                        "id": user_id,
+                        "email": email,
+                        "name": name,
+                        "picture": picture,
+                    },
+                    "is_new": is_new,
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to upsert user");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "ユーザー登録に失敗しました"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// --- Konami endpoint ---
+
+pub async fn handle_konami(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let tier = extract_user_tier(&headers, &state.db);
+    match tier {
+        UserTier::Authenticated { user_id, .. } => {
+            match state.db.claim_konami(&user_id) {
+                Ok(true) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({"success": true, "message": "コナミコマンド発動！1000トークンを獲得しました！"})),
+                )
+                    .into_response(),
+                Ok(false) => (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({"success": false, "message": "コナミコマンドは既に使用済みです"})),
+                )
+                    .into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e})),
+                )
+                    .into_response(),
+            }
+        }
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Googleログインが必要です"})),
+        )
+            .into_response(),
+    }
+}
+
+// --- Config endpoint (returns Google Client ID for frontend) ---
+
+pub async fn handle_config(
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (header::CACHE_CONTROL, "public, max-age=3600"),
+            (header::CONTENT_TYPE, "application/json; charset=utf-8"),
+        ],
+        Json(serde_json::json!({
+            "google_client_id": state.google_client_id,
+        })),
+    )
+        .into_response()
 }
 
 // --- Telemetry endpoint (fire-and-forget from sendBeacon) ---

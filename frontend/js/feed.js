@@ -14,6 +14,13 @@ const FeedApp = (() => {
   let activeObserver = null;
   let currentActiveItem = null;
 
+  // --- In-memory cache for instant category switching ---
+  const feedCache = new Map(); // key: category → { articles, cursor, ts }
+  const FEED_CACHE_TTL = 60_000; // 1 min
+
+  // --- Prefetch queue ---
+  let prefetchedNext = null; // { category, cursor, promise }
+
   function init() {
     // Hide standard news UI
     const header = document.querySelector('.header');
@@ -73,12 +80,94 @@ const FeedApp = (() => {
       FeedVoice.init();
     }
 
+    // Init AI murmur
+    if (typeof FeedMurmur !== 'undefined') {
+      FeedMurmur.init();
+    }
+
+    // Swipe hint for first-time users
+    if (!localStorage.getItem('feed_hint_shown')) {
+      const hint = document.createElement('div');
+      hint.className = 'feed-swipe-hint';
+      hint.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><span>スワイプで次の記事</span>';
+      document.body.appendChild(hint);
+      localStorage.setItem('feed_hint_shown', '1');
+      setTimeout(() => hint.remove(), 6500);
+    }
+
     // Create settings bottom sheet
     createSettingsSheet();
+
+    // PWA Install Prompt
+    setupInstallPrompt();
 
     // Load data
     loadCategories();
     loadArticles();
+  }
+
+  // --- PWA Install Prompt ---
+  let deferredPrompt = null;
+  let swipeCount = 0;
+
+  function setupInstallPrompt() {
+    // Don't show if already dismissed or already installed
+    if (localStorage.getItem('pwa_dismissed') === '1') return;
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+
+      // Show after 30 seconds
+      setTimeout(() => {
+        if (deferredPrompt) showInstallBanner();
+      }, 30000);
+    });
+
+    // Track swipes via active item changes
+    const origSetActive = setActiveItem;
+    setActiveItem = function(item) {
+      origSetActive(item);
+      swipeCount++;
+      if (swipeCount >= 3 && deferredPrompt && !document.querySelector('.feed-install-banner')) {
+        showInstallBanner();
+      }
+    };
+  }
+
+  function showInstallBanner() {
+    if (!deferredPrompt) return;
+    if (localStorage.getItem('pwa_dismissed') === '1') return;
+    if (document.querySelector('.feed-install-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'feed-install-banner';
+    banner.innerHTML = `
+      <span class="feed-install-banner__text">ホーム画面に追加して最高の体験を</span>
+      <button class="feed-install-banner__add">追加</button>
+      <button class="feed-install-banner__dismiss" aria-label="閉じる">\u2715</button>
+    `;
+    document.body.appendChild(banner);
+
+    // Trigger slide-down animation
+    requestAnimationFrame(() => banner.classList.add('visible'));
+
+    banner.querySelector('.feed-install-banner__add').addEventListener('click', () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => {
+          deferredPrompt = null;
+          banner.remove();
+        });
+      }
+    });
+
+    banner.querySelector('.feed-install-banner__dismiss').addEventListener('click', () => {
+      localStorage.setItem('pwa_dismissed', '1');
+      banner.classList.remove('visible');
+      setTimeout(() => banner.remove(), 300);
+    });
   }
 
   function handleKeyboard(e) {
@@ -92,6 +181,10 @@ const FeedApp = (() => {
       e.preventDefault();
       if (currentActiveItem && typeof FeedPlayer !== 'undefined') {
         FeedPlayer.togglePlay(currentActiveItem);
+      }
+    } else if (e.key === 'm' || e.key === 'M') {
+      if (typeof FeedMurmur !== 'undefined') {
+        FeedMurmur.toggle();
       }
     }
   }
@@ -123,6 +216,9 @@ const FeedApp = (() => {
       if (typeof FeedPlayer !== 'undefined') {
         FeedPlayer.onItemDeactivated(currentActiveItem);
       }
+      if (typeof FeedMurmur !== 'undefined') {
+        FeedMurmur.onArticleDeactivated();
+      }
     }
 
     // Stop any ongoing browser speech
@@ -133,8 +229,9 @@ const FeedApp = (() => {
     currentActiveItem = item;
     item.classList.add('active');
 
-    // Announce article title via browser TTS
-    if (announceEnabled && window.speechSynthesis) {
+    // Announce article title via browser TTS (suppress if murmur is active)
+    const murmurActive = typeof FeedMurmur !== 'undefined' && FeedMurmur.isEnabled();
+    if (announceEnabled && !murmurActive && window.speechSynthesis) {
       const title = item.dataset.title || '';
       const source = item.dataset.source || '';
       if (title) {
@@ -152,6 +249,17 @@ const FeedApp = (() => {
     if (typeof FeedPlayer !== 'undefined') {
       FeedPlayer.onItemActivated(item);
     }
+
+    // Trigger AI murmur
+    if (typeof FeedMurmur !== 'undefined') {
+      FeedMurmur.onArticleActivated(item);
+    }
+
+    // Prefetch images for next 3 items (instant swipe)
+    preloadNearbyImages(item);
+
+    // Prefetch next page when near end
+    prefetchNextPage();
   }
 
   function setAnnounce(enabled) {
@@ -211,7 +319,36 @@ const FeedApp = (() => {
   function setCategory(cat) {
     currentCategory = cat;
     renderCategories();
+    if (typeof Ads !== 'undefined') Ads.resetCounter();
+
+    // Instant switch: use cached data if available
+    const cacheKey = cat || '__all__';
+    const cached = feedCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < FEED_CACHE_TTL) {
+      currentCursor = null;
+      feedContainer.innerHTML = '';
+      renderArticles(cached.articles, false);
+      currentCursor = cached.cursor;
+      // Background refresh
+      fetchFeed(cat, null).then(data => {
+        if (data) {
+          feedCache.set(cacheKey, { articles: data.articles, cursor: data.next_cursor, ts: Date.now() });
+        }
+      }).catch(() => {});
+      return;
+    }
     loadArticles();
+  }
+
+  /** Fetch feed data (returns parsed JSON or null) */
+  async function fetchFeed(category, cursor) {
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    params.set('limit', '10');
+    if (cursor) params.set('cursor', cursor);
+    const res = await fetch(`/api/feed?${params}`);
+    if (!res.ok) return null;
+    return res.json();
   }
 
   async function loadArticles(append = false) {
@@ -221,44 +358,51 @@ const FeedApp = (() => {
     if (!append) {
       currentCursor = null;
       feedContainer.innerHTML = '';
-      // Show loading skeleton
-      for (let i = 0; i < 3; i++) {
-        const skeleton = document.createElement('div');
-        skeleton.className = 'feed-item';
-        skeleton.style.background = '#111';
-        skeleton.style.display = 'flex';
-        skeleton.style.alignItems = 'center';
-        skeleton.style.justifyContent = 'center';
-        skeleton.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:14px">読み込み中...</div>';
-        feedContainer.appendChild(skeleton);
-      }
+      // Minimal skeleton (1 item, no layout shift)
+      const skeleton = document.createElement('div');
+      skeleton.className = 'feed-item feed-item--skeleton';
+      skeleton.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:14px;display:flex;align-items:center;justify-content:center;height:100%">読み込み中...</div>';
+      feedContainer.appendChild(skeleton);
     }
 
     try {
-      const params = new URLSearchParams();
-      if (currentCategory) params.set('category', currentCategory);
-      params.set('limit', '10');
-      if (append && currentCursor) params.set('cursor', currentCursor);
+      // Check if we have a prefetched result ready
+      let data = null;
+      if (append && prefetchedNext && prefetchedNext.category === currentCategory && prefetchedNext.cursor === currentCursor) {
+        data = await prefetchedNext.promise;
+        prefetchedNext = null;
+      }
 
-      const res = await fetch(`/api/feed?${params}`);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
+      if (!data) {
+        data = await fetchFeed(currentCategory || null, append ? currentCursor : null);
+      }
+
+      if (!data) throw new Error('Empty response');
 
       if (!append) {
         feedContainer.innerHTML = '';
+        // Cache this result for instant category switching
+        const cacheKey = currentCategory || '__all__';
+        feedCache.set(cacheKey, { articles: data.articles, cursor: data.next_cursor, ts: Date.now() });
       }
 
-      for (const article of data.articles) {
-        const item = createFeedItem(article);
-        feedContainer.appendChild(item);
-        activeObserver.observe(item);
-      }
-
+      renderArticles(data.articles, append);
       currentCursor = data.next_cursor || null;
 
-      // If first load, scroll to top
       if (!append && feedContainer.firstChild) {
         feedContainer.scrollTop = 0;
+      }
+
+      // Preload images for first 3 items
+      if (!append) {
+        const items = feedContainer.querySelectorAll('.feed-item');
+        for (let i = 0; i < Math.min(3, items.length); i++) {
+          const bg = items[i].querySelector('.feed-item__bg');
+          if (bg && bg.dataset.src) {
+            bg.style.backgroundImage = `url('${bg.dataset.src}')`;
+            bg.removeAttribute('data-src');
+          }
+        }
       }
     } catch (e) {
       console.error('Feed load error:', e);
@@ -267,6 +411,49 @@ const FeedApp = (() => {
       }
     } finally {
       isLoading = false;
+    }
+  }
+
+  function renderArticles(articles, append) {
+    const fragment = document.createDocumentFragment();
+    for (const article of articles) {
+      const item = createFeedItem(article);
+      fragment.appendChild(item);
+      activeObserver.observe(item);
+      if (typeof Ads !== 'undefined') {
+        const adEl = Ads.maybeFeedAd();
+        if (adEl) fragment.appendChild(adEl);
+      }
+    }
+    feedContainer.appendChild(fragment);
+  }
+
+  /** Preload images for the next N siblings */
+  function preloadNearbyImages(item) {
+    let el = item;
+    for (let i = 0; i < 3; i++) {
+      el = el.nextElementSibling;
+      if (!el || !el.classList.contains('feed-item')) break;
+      const bg = el.querySelector('.feed-item__bg');
+      if (bg && bg.dataset.src) {
+        bg.style.backgroundImage = `url('${bg.dataset.src}')`;
+        bg.removeAttribute('data-src');
+      }
+    }
+  }
+
+  /** Prefetch next page when user is within last 3 items */
+  function prefetchNextPage() {
+    if (!currentCursor || prefetchedNext) return;
+    const items = feedContainer.querySelectorAll('.feed-item');
+    if (!currentActiveItem || items.length === 0) return;
+    const idx = Array.from(items).indexOf(currentActiveItem);
+    if (idx >= items.length - 3) {
+      prefetchedNext = {
+        category: currentCategory,
+        cursor: currentCursor,
+        promise: fetchFeed(currentCategory || null, currentCursor),
+      };
     }
   }
 
@@ -293,7 +480,7 @@ const FeedApp = (() => {
     const catLabel = catInfo ? (catInfo.label_ja || catInfo.label) : (article.category || '');
 
     item.innerHTML = `
-      <div class="feed-item__bg" ${hasImage ? `style="background-image:url('${escHtml(article.image_url)}')"` : ''}></div>
+      <div class="feed-item__bg" ${hasImage ? `data-src="${escHtml(article.image_url)}"` : ''}></div>
       <div class="feed-item__actions">
         <button class="feed-action-btn feed-action-share" aria-label="シェア">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -307,7 +494,7 @@ const FeedApp = (() => {
       <div class="feed-item__content">
         ${catLabel ? `<span class="feed-item__category">${escHtml(catLabel)}</span>` : ''}
         <h2 class="feed-item__title">${escHtml(article.title || '')}</h2>
-        ${article.description ? `<p class="feed-item__desc">${escHtml(article.description)}</p>` : ''}
+        ${article.description ? `<p class="feed-item__desc">${escHtml(stripHtml(article.description))}</p>` : ''}
         <div class="feed-item__meta">
           <span>${escHtml(article.source || '')}</span>
           ${timeAgo ? `<span class="feed-item__meta-dot"></span><span>${timeAgo}</span>` : ''}
@@ -321,7 +508,7 @@ const FeedApp = (() => {
           <span class="player__avatar-label">Analyst</span>
         </div>
         <div class="player__subtitle">
-          <span class="player__subtitle-text">タップして再生</span>
+          <span class="player__subtitle-text visible">▶ ポッドキャストを聴く</span>
         </div>
         <div class="player__controls">
           <button class="player__play-btn" aria-label="再生">
@@ -381,6 +568,11 @@ const FeedApp = (() => {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function stripHtml(str) {
+    if (!str) return '';
+    return str.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
   function autoScrollNext() {
     if (!currentActiveItem) return;
     const next = currentActiveItem.nextElementSibling;
@@ -410,10 +602,14 @@ const FeedApp = (() => {
     sheet.className = 'feed-sheet';
     sheet.id = 'feed-sheet';
 
+    // Pro status
+    const isPro = typeof Subscription !== 'undefined' && Subscription.isPro();
+
     // Load saved settings
     const savedAnnounce = localStorage.getItem('feed_announce') !== 'false';
     const savedAutoScroll = localStorage.getItem('feed_auto_scroll') !== 'false';
     const savedAutoPlay = localStorage.getItem('feed_auto_play') === 'true';
+    const savedMurmur = localStorage.getItem('feed_murmur') === 'true';
 
     announceEnabled = savedAnnounce;
 
@@ -435,6 +631,12 @@ const FeedApp = (() => {
           <input type="checkbox" id="setting-auto-scroll" ${savedAutoScroll ? 'checked' : ''}>
           <span class="feed-sheet__toggle-switch"></span>
         </label>
+        <label class="feed-sheet__toggle">
+          <span class="feed-sheet__toggle-label">AIつぶやき</span>
+          <span class="feed-sheet__toggle-desc">記事を見るとき、AIがカジュアルな感想を音声でつぶやきます（Mキーでも切替）</span>
+          <input type="checkbox" id="setting-murmur" ${savedMurmur ? 'checked' : ''}>
+          <span class="feed-sheet__toggle-switch"></span>
+        </label>
       </div>
 
       <div class="feed-sheet__section">
@@ -446,6 +648,14 @@ const FeedApp = (() => {
             <button class="feed-sheet__font-btn active" data-size="medium">A</button>
             <button class="feed-sheet__font-btn" data-size="large">A</button>
           </div>
+        </div>
+      </div>
+
+      <div class="feed-sheet__section">
+        <h3 class="feed-sheet__section-title">プラン</h3>
+        <div class="feed-sheet__info" id="feed-plan-info">
+          ${isPro ? '<span style="color:#22c55e;font-weight:600">Pro プラン</span><a href="/pro.html" style="color:rgba(255,255,255,0.5);font-size:12px">管理</a>'
+                   : '<span>Free プラン</span><a href="/pro.html" style="color:#f59e0b;font-weight:600;font-size:13px">Proにアップグレード →</a>'}
         </div>
       </div>
 
@@ -480,6 +690,12 @@ const FeedApp = (() => {
 
     sheet.querySelector('#setting-auto-scroll').addEventListener('change', (e) => {
       localStorage.setItem('feed_auto_scroll', e.target.checked);
+    });
+
+    sheet.querySelector('#setting-murmur').addEventListener('change', (e) => {
+      if (typeof FeedMurmur !== 'undefined') {
+        FeedMurmur.setEnabled(e.target.checked);
+      }
     });
 
     // Font size buttons

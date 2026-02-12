@@ -81,6 +81,13 @@ const FeedPlayer = (() => {
         body: JSON.stringify(body),
       });
 
+      if (res.status === 402 || res.status === 429) {
+        st.state = STATE_IDLE;
+        setSubtitle(item, '');
+        showUpgradeCTA(item, res.status === 429 ? '本日の利用回数に達しました' : 'トークン不足です');
+        updateUI(item);
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || err.error || `API error: ${res.status}`);
@@ -311,6 +318,15 @@ const FeedPlayer = (() => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function showUpgradeCTA(item, message) {
+    // Show inline upgrade prompt in the player area
+    const subtitleEl = item.querySelector('.player__subtitle-text');
+    if (subtitleEl) {
+      subtitleEl.innerHTML = `${message} <a href="/pro.html" style="color:#f59e0b;text-decoration:underline;font-weight:600">Proで無制限→</a>`;
+      subtitleEl.classList.add('visible');
+    }
   }
 
   return { onItemActivated, onItemDeactivated, togglePlay };

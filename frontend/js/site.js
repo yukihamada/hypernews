@@ -97,6 +97,9 @@ const Site = (() => {
     const mf = document.querySelector('link[rel="manifest"]');
     if (mf) mf.setAttribute('href', c.manifest);
 
+    // Cross-site navigation footer
+    renderFooter();
+
     // OGP
     setMeta('og:title', c.title);
     setMeta('og:url', c.url);
@@ -114,6 +117,30 @@ const Site = (() => {
     const el = document.querySelector(`meta[name="${nameOrProp}"]`)
             || document.querySelector(`meta[property="${nameOrProp}"]`);
     if (el) el.setAttribute('content', content);
+  }
+
+  const sisterSites = [
+    { id: 'xyz',      url: 'https://news.xyz/',       label: 'news.xyz',   desc: 'AIニュース' },
+    { id: 'claud',    url: 'https://news.claud/',      label: 'ClaudNews',  desc: 'AIニュース' },
+    { id: 'online',   url: 'https://news.online/',     label: 'news.online', desc: '音声ニュース' },
+    { id: 'cloud',    url: 'https://news.cloud/',      label: 'news.cloud', desc: 'API' },
+    { id: 'chatnews', url: 'https://chatnews.link/',   label: 'ChatNews',   desc: 'チャット' },
+    { id: 'yournews', url: 'https://yournews.link/',   label: 'YourNews',   desc: 'パーソナル' },
+    { id: 'velo',     url: 'https://velo.tech/',       label: 'velo.tech',  desc: '速度計測' },
+  ];
+
+  function renderFooter() {
+    const footer = document.getElementById('site-footer');
+    if (!footer) return;
+    const others = sisterSites.filter(s => s.id !== siteId);
+    footer.innerHTML =
+      '<div class="site-footer-label">姉妹サイト</div>' +
+      '<div class="site-footer-links">' +
+      others.map(s =>
+        '<a class="site-footer-link" href="' + s.url + '" rel="noopener">' +
+        s.label + '<span class="site-footer-brand"> - ' + s.desc + '</span></a>'
+      ).join('') +
+      '</div>';
   }
 
   // Apply immediately on parse (before DOMContentLoaded for meta tags that exist)

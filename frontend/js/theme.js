@@ -4,7 +4,7 @@
 'use strict';
 
 const Theme = (() => {
-  const THEMES = ['hacker', 'card', 'lite'];
+  const THEMES = ['hacker', 'card', 'lite', 'terminal', 'magazine', 'brutalist', 'pastel', 'neon'];
   const FONT_SIZES = [12, 14, 16, 18, 20, 24];
   const DENSITIES = ['compact', 'normal', 'spacious'];
 
@@ -104,5 +104,17 @@ const Theme = (() => {
     };
   }
 
-  return { apply, setTheme, setMode, toggleMode, setFontSize, adjustFontSize, setAccentColor, setDensity, getState, THEMES, ACCENT_PRESETS, DENSITIES };
+  function randomize() {
+    const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
+    const mode = Math.random() > 0.5 ? 'dark' : 'light';
+    const accentKeys = Object.keys(ACCENT_PRESETS);
+    const accent = accentKeys[Math.floor(Math.random() * accentKeys.length)];
+    Storage.set('theme', theme);
+    Storage.set('mode', mode);
+    Storage.set('accentColor', accent);
+    apply();
+    return { theme, mode, accent };
+  }
+
+  return { apply, setTheme, setMode, toggleMode, setFontSize, adjustFontSize, setAccentColor, setDensity, getState, randomize, THEMES, ACCENT_PRESETS, DENSITIES };
 })();

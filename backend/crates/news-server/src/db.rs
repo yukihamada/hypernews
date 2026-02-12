@@ -101,7 +101,21 @@ impl Db {
                 expires_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_ai_cache_expires
-                ON ai_cache(expires_at);",
+                ON ai_cache(expires_at);
+
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL DEFAULT '',
+                picture_url TEXT,
+                google_id TEXT NOT NULL UNIQUE,
+                auth_token TEXT NOT NULL UNIQUE,
+                device_id TEXT,
+                konami_claimed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);",
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
 
@@ -267,6 +281,48 @@ impl Db {
             )
             .map_err(|e| format!("Delete old: {e}"))?;
         Ok(deleted)
+    }
+
+    pub fn get_article_by_id(&self, id: &str) -> Result<Option<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles WHERE id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut rows = stmt
+            .query_map(params![id], row_to_article)
+            .map_err(|e| e.to_string())?;
+        match rows.next() {
+            Some(Ok(article)) => Ok(Some(article)),
+            Some(Err(e)) => Err(e.to_string()),
+            None => Ok(None),
+        }
+    }
+
+    // --- Search ---
+
+    pub fn search_articles(&self, query: &str, limit: i64) -> Result<Vec<Article>, String> {
+        let search = format!("%{}%", query);
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles
+                 WHERE title LIKE ?1 OR description LIKE ?1
+                 ORDER BY published_at DESC
+                 LIMIT ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let articles = stmt
+            .query_map(params![search, limit], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(articles)
     }
 
     // --- Feeds ---
@@ -879,6 +935,94 @@ impl Db {
             .execute("DELETE FROM ai_cache WHERE expires_at < ?1", params![now])
             .map_err(|e| format!("Cleanup cache: {e}"))?;
         Ok(deleted)
+    }
+
+    // --- Users (Google Auth) ---
+
+    /// Upsert a user from Google Sign-In. Returns (auth_token, user_id, is_new).
+    pub fn upsert_user(
+        &self,
+        google_id: &str,
+        email: &str,
+        name: &str,
+        picture_url: Option<&str>,
+        device_id: Option<&str>,
+    ) -> Result<(String, String, bool), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Check if user already exists
+        let existing: Option<(String, String)> = conn
+            .query_row(
+                "SELECT id, auth_token FROM users WHERE google_id = ?1",
+                params![google_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+
+        if let Some((user_id, auth_token)) = existing {
+            // Update existing user
+            conn.execute(
+                "UPDATE users SET email = ?1, name = ?2, picture_url = ?3, device_id = COALESCE(?4, device_id), updated_at = ?5 WHERE id = ?6",
+                params![email, name, picture_url, device_id, now, user_id],
+            )
+            .map_err(|e| format!("Update user: {e}"))?;
+            info!(user_id = %user_id, email = %email, "User updated");
+            Ok((auth_token, user_id, false))
+        } else {
+            // Create new user
+            let user_id = uuid::Uuid::new_v4().to_string();
+            let auth_token = format!("ga_{}", uuid::Uuid::new_v4().to_string().replace('-', ""));
+            conn.execute(
+                "INSERT INTO users (id, email, name, picture_url, google_id, auth_token, device_id, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+                params![user_id, email, name, picture_url, google_id, auth_token, device_id, now],
+            )
+            .map_err(|e| format!("Insert user: {e}"))?;
+            info!(user_id = %user_id, email = %email, "New user created");
+            Ok((auth_token, user_id, true))
+        }
+    }
+
+    /// Get a user by their auth token. Returns (user_id, email, name, picture_url, device_id, konami_claimed).
+    pub fn get_user_by_auth_token(
+        &self,
+        auth_token: &str,
+    ) -> Result<Option<(String, String, String, Option<String>, Option<String>, bool)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let result = conn
+            .query_row(
+                "SELECT id, email, name, picture_url, device_id, konami_claimed FROM users WHERE auth_token = ?1",
+                params![auth_token],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, i32>(5)? != 0,
+                    ))
+                },
+            )
+            .ok();
+        Ok(result)
+    }
+
+    /// Claim the konami code bonus for a user. Returns true if successfully claimed, false if already used.
+    pub fn claim_konami(&self, user_id: &str) -> Result<bool, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let affected = conn
+            .execute(
+                "UPDATE users SET konami_claimed = 1, updated_at = ?1 WHERE id = ?2 AND konami_claimed = 0",
+                params![now, user_id],
+            )
+            .map_err(|e| format!("Claim konami: {e}"))?;
+        if affected > 0 {
+            info!(user_id = %user_id, "Konami code claimed");
+        }
+        Ok(affected > 0)
     }
 }
 

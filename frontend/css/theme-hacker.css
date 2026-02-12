@@ -101,7 +101,7 @@
 }
 
 /* Hide images — text-focused */
-[data-theme="hacker"] .article-img {
+[data-theme="hacker"] .article-img-wrap {
   display: none !important;
 }
 

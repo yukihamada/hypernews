@@ -35,7 +35,7 @@ impl Default for FeatureFlags {
         Self {
             grouping_enabled: false,
             grouping_threshold: 0.3,
-            ogp_enrichment_enabled: false,
+            ogp_enrichment_enabled: true,
         }
     }
 }
@@ -268,7 +268,7 @@ mod tests {
     fn default_feature_flags() {
         let flags = FeatureFlags::default();
         assert!(!flags.grouping_enabled);
-        assert!(!flags.ogp_enrichment_enabled);
+        assert!(flags.ogp_enrichment_enabled);
         assert!((flags.grouping_threshold - 0.3).abs() < f64::EPSILON);
     }
 

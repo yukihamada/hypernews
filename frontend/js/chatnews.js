@@ -32,6 +32,73 @@ const ChatNewsApp = (() => {
     return div.innerHTML;
   }
 
+  // ===== AI Response Formatting (basic markdown → HTML) =====
+  function formatAiResponse(text) {
+    if (!text) return '';
+    // First, HTML-escape the entire text
+    const escaped = escHtml(text);
+    const lines = escaped.split('\n');
+    const result = [];
+    let inUl = false;
+    let inOl = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const ulMatch = line.match(/^(\- |• )(.*)$/);
+      const olMatch = line.match(/^(\d+)\. (.*)$/);
+
+      if (ulMatch) {
+        if (!inUl) {
+          if (inOl) { result.push('</ol>'); inOl = false; }
+          result.push('<ul>');
+          inUl = true;
+        }
+        result.push('<li>' + formatInline(ulMatch[2]) + '</li>');
+      } else if (olMatch) {
+        if (!inOl) {
+          if (inUl) { result.push('</ul>'); inUl = false; }
+          result.push('<ol>');
+          inOl = true;
+        }
+        result.push('<li>' + formatInline(olMatch[2]) + '</li>');
+      } else {
+        if (inUl) { result.push('</ul>'); inUl = false; }
+        if (inOl) { result.push('</ol>'); inOl = false; }
+        result.push(formatInline(line));
+      }
+    }
+
+    if (inUl) result.push('</ul>');
+    if (inOl) result.push('</ol>');
+
+    // Join lines: lines inside lists are already wrapped in <li>,
+    // non-list lines get <br> separators
+    let html = '';
+    for (let i = 0; i < result.length; i++) {
+      const seg = result[i];
+      if (seg.startsWith('<ul>') || seg.startsWith('</ul>') ||
+          seg.startsWith('<ol>') || seg.startsWith('</ol>') ||
+          seg.startsWith('<li>')) {
+        html += seg;
+      } else {
+        if (html.length > 0 && !html.endsWith('>')) {
+          html += '<br>';
+        }
+        html += seg;
+      }
+    }
+    return html;
+  }
+
+  /** Apply inline formatting (bold, italic) to an already-escaped string */
+  function formatInline(str) {
+    // Bold: **text** (use non-greedy match)
+    str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic: *text* (but not inside <strong> tags — match single * not preceded/followed by *)
+    str = str.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+    return str;
+  }
+
   // ===== Relative Time =====
   function relativeTime(isoStr) {
     if (!isoStr) return '';
@@ -204,7 +271,7 @@ const ChatNewsApp = (() => {
   async function fetchTopHeadlines() {
     showTyping();
     try {
-      const data = await Api.fetchArticles(null, 3);
+      const data = await Api.fetchArticles(null, 5);
       hideTyping();
       if (data.articles && data.articles.length > 0) {
         addAICardsMessage('\u4ECA\u65E5\u306E\u30C8\u30C3\u30D7\u30CB\u30E5\u30FC\u30B9\u3067\u3059\uFF1A', data.articles);
@@ -381,8 +448,8 @@ const ChatNewsApp = (() => {
 
     const bubble = document.createElement('div');
     bubble.className = 'cn-bubble cn-bubble--ai';
-    // Render text with line breaks preserved
-    bubble.innerHTML = escHtml(text).replace(/\n/g, '<br>');
+    // Render AI response with rich formatting (markdown → HTML)
+    bubble.innerHTML = formatAiResponse(text);
 
     row.appendChild(avatar);
     row.appendChild(bubble);

@@ -103,6 +103,11 @@
   color: #fff;
   border-color: var(--accent);
 }
+.chat-chip[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .chat-chip.chip-accent {
   border-color: var(--accent);
   color: var(--accent);

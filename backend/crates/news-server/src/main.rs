@@ -53,6 +53,7 @@ async fn main() {
     let stripe_price_id = std::env::var("STRIPE_PRICE_ID").unwrap_or_default();
     let admin_secret = std::env::var("ADMIN_SECRET").unwrap_or_default();
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "https://news.xyz".into());
+    let google_client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -123,6 +124,7 @@ async fn main() {
         stripe_price_id,
         admin_secret,
         base_url,
+        google_client_id,
     });
 
     let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
@@ -160,6 +162,7 @@ async fn main() {
         .route("/api/tts", post(routes::handle_tts))
         .route("/api/tts/clone", post(routes::handle_tts_clone))
         .route("/api/podcast/generate", post(routes::handle_podcast_generate))
+        .route("/api/murmur/generate", post(routes::handle_murmur_generate))
         .route("/api/feed", get(routes::get_feed))
         .route("/api/admin/feeds", get(routes::list_feeds))
         .route("/api/admin/feeds", post(routes::add_feed))
@@ -183,6 +186,10 @@ async fn main() {
         .route("/api/subscription/status", get(routes::handle_subscription_status))
         .route("/api/subscription/portal", post(routes::handle_billing_portal))
         .route("/api/usage", get(routes::handle_usage))
+        // Auth routes
+        .route("/api/auth/google", post(routes::handle_google_auth))
+        .route("/api/auth/konami", post(routes::handle_konami))
+        .route("/api/config", get(routes::handle_config))
         // Telemetry (vitals + errors from frontend beacon)
         .route("/api/telemetry", post(routes::handle_telemetry))
         // MCP server endpoint

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <script>(function(){var h=location.hostname;var s='xyz';if(h.indexOf('online')!==-1)s='online';else if(h.indexOf('chatnews')!==-1)s='chatnews';else if(h.indexOf('yournews')!==-1)s='yournews';else if(h.indexOf('velo')!==-1)s='velo';else if(h.indexOf('.cloud')!==-1)s='cloud';else if(h.indexOf('claud')!==-1)s='claud';document.documentElement.dataset.site=s;})()</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Proプランで全AI機能が無制限に。ポッドキャスト生成・AI要約・Q&A・読み上げが使い放題。">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Pro - AI機能を無制限に</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/pro.css?v=32">
+</head>
+<body>
+  <div class="pro-page">
+    <!-- Back nav -->
+    <nav class="pro-nav">
+      <a href="/" class="pro-nav__back" aria-label="戻る">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        <span class="pro-nav__site">news</span>
+      </a>
+    </nav>
+
+    <!-- Hero -->
+    <header class="pro-hero">
+      <div class="pro-hero__badge">Pro</div>
+      <h1 class="pro-hero__title">AI機能を<br>無制限に</h1>
+      <p class="pro-hero__sub">ポッドキャスト生成・AI要約・Q&A・読み上げが使い放題</p>
+    </header>
+
+    <!-- Plans -->
+    <section class="pro-plans">
+      <!-- Free -->
+      <div class="pro-card">
+        <div class="pro-card__header">
+          <h2 class="pro-card__name">Free</h2>
+          <div class="pro-card__price"><span class="pro-card__amount">¥0</span></div>
+        </div>
+        <ul class="pro-card__features">
+          <li class="pro-card__feature">ニュース閲覧（無制限）</li>
+          <li class="pro-card__feature">AIポッドキャスト <strong>10回/日</strong></li>
+          <li class="pro-card__feature">AI質問・回答 <strong>20回/日</strong></li>
+          <li class="pro-card__feature">AI要約 <strong>20回/日</strong></li>
+          <li class="pro-card__feature">読み上げ <strong>30回/日</strong></li>
+          <li class="pro-card__feature">AIトークン <strong>30T（上限100T）</strong></li>
+        </ul>
+        <a href="/" class="pro-card__btn pro-card__btn--outline">現在のプラン</a>
+      </div>
+
+      <!-- Free + Google -->
+      <div class="pro-card">
+        <div class="pro-card__header">
+          <h2 class="pro-card__name">Free + Google</h2>
+          <div class="pro-card__price"><span class="pro-card__amount">¥0</span></div>
+        </div>
+        <ul class="pro-card__features">
+          <li class="pro-card__feature pro-card__feature--highlight">制限が<strong>2倍</strong>に！</li>
+          <li class="pro-card__feature">AIポッドキャスト <strong>20回/日</strong></li>
+          <li class="pro-card__feature">AI質問・回答 <strong>40回/日</strong></li>
+          <li class="pro-card__feature">AI要約 <strong>40回/日</strong></li>
+          <li class="pro-card__feature">読み上げ <strong>60回/日</strong></li>
+          <li class="pro-card__feature">AIトークン <strong>30T（上限100T）</strong></li>
+        </ul>
+        <button class="pro-card__btn pro-card__btn--outline" id="pro-google-btn">Googleでログイン</button>
+      </div>
+
+      <!-- Pro -->
+      <div class="pro-card pro-card--featured">
+        <div class="pro-card__popular">おすすめ</div>
+        <div class="pro-card__header">
+          <h2 class="pro-card__name">Pro</h2>
+          <div class="pro-card__price">
+            <span class="pro-card__amount">¥500</span>
+            <span class="pro-card__period">/月</span>
+          </div>
+        </div>
+        <ul class="pro-card__features">
+          <li class="pro-card__feature pro-card__feature--highlight">全AI機能が<strong>無制限</strong></li>
+          <li class="pro-card__feature">AIポッドキャスト <strong>無制限</strong></li>
+          <li class="pro-card__feature">AI質問・回答 <strong>無制限</strong></li>
+          <li class="pro-card__feature">AI要約 <strong>無制限</strong></li>
+          <li class="pro-card__feature">全TTS音声 <strong>無制限</strong></li>
+          <li class="pro-card__feature">AIトークン <strong>無制限</strong></li>
+          <li class="pro-card__feature">優先API処理</li>
+        </ul>
+        <button class="pro-card__btn pro-card__btn--filled" id="pro-subscribe-btn">Proにアップグレード</button>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="pro-faq">
+      <h2 class="pro-faq__title">よくある質問</h2>
+      <details class="pro-faq__item">
+        <summary>いつでも解約できますか？</summary>
+        <p>はい。いつでもワンクリックで解約でき、次の更新日まではPro機能をご利用いただけます。</p>
+      </details>
+      <details class="pro-faq__item">
+        <summary>支払い方法は？</summary>
+        <p>クレジットカード（Visa, Mastercard, AMEX, JCB）に対応。Stripeで安全に処理されます。</p>
+      </details>
+      <details class="pro-faq__item">
+        <summary>AIトークンとは？</summary>
+        <p>AI機能（質問・回答・要約等）の利用にはトークンを消費します。キャッシュヒット（過去に同じ質問があった場合）ではトークンが獲得できます。Proプランではトークン無制限です。</p>
+      </details>
+      <details class="pro-faq__item">
+        <summary>news.onlineでも使えますか？</summary>
+        <p>はい。同じアカウントでnews.xyz、news.online、その他全サイトでPro機能をご利用いただけます。</p>
+      </details>
+    </section>
+
+    <!-- Billing portal link for existing Pro users -->
+    <div class="pro-manage" id="pro-manage" style="display:none">
+      <p>Proプランをご利用中です</p>
+      <button class="pro-manage__btn" id="pro-portal-btn">課金管理・解約</button>
+    </div>
+
+    <footer class="pro-footer">
+      <a href="/">ホームに戻る</a>
+      <a href="/about.html">about</a>
+    </footer>
+  </div>
+
+  <script src="/js/storage.js?v=34"></script>
+  <script src="/js/site.js?v=34"></script>
+  <script src="/js/subscription.js?v=34"></script>
+  <script src="/js/google-auth.js?v=34"></script>
+  <script>
+  (function() {
+    // Apply site branding
+    var siteId = document.documentElement.dataset.site || 'xyz';
+    var siteName = { xyz: 'news.xyz', online: 'news.online', claud: 'ClaudNews' }[siteId] || 'news.xyz';
+    var el = document.querySelector('.pro-nav__site');
+    if (el) el.textContent = siteName;
+    document.title = 'Pro - ' + siteName;
+
+    // Show manage section if already Pro
+    if (Subscription.isPro()) {
+      document.getElementById('pro-manage').style.display = '';
+      var btn = document.getElementById('pro-subscribe-btn');
+      if (btn) { btn.textContent = 'ご利用中'; btn.disabled = true; btn.classList.add('pro-card__btn--disabled'); }
+    }
+
+    // Google login button on pro page
+    var googleBtn = document.getElementById('pro-google-btn');
+    if (googleBtn) {
+      if (typeof GoogleAuth !== 'undefined' && GoogleAuth.isAuthenticated()) {
+        var user = GoogleAuth.getUser();
+        googleBtn.textContent = (user && user.name ? user.name : 'ログイン済み');
+        googleBtn.disabled = true;
+        googleBtn.classList.add('pro-card__btn--disabled');
+      } else {
+        googleBtn.addEventListener('click', function() {
+          if (typeof GoogleAuth !== 'undefined') {
+            GoogleAuth.init().then(function() {
+              GoogleAuth.showOneTap();
+              // Also render inline button
+              var container = document.createElement('div');
+              container.style.padding = '8px';
+              googleBtn.parentNode.insertBefore(container, googleBtn.nextSibling);
+              GoogleAuth.renderButton(container);
+            });
+          }
+        });
+      }
+    }
+
+    // Subscribe button
+    document.getElementById('pro-subscribe-btn').addEventListener('click', function() {
+      this.textContent = '処理中...';
+      this.disabled = true;
+      fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...Subscription.authHeaders() },
+        body: JSON.stringify({ device_id: Subscription.getDeviceId() }),
+      })
+      .then(function(res) {
+        if (res.status === 503) {
+          alert('サブスクリプション機能は現在準備中です。');
+          return;
+        }
+        return res.json();
+      })
+      .then(function(data) {
+        if (data && data.url) window.location.href = data.url;
+      })
+      .catch(function() {
+        alert('エラーが発生しました。もう一度お試しください。');
+      })
+      .finally(function() {
+        var b = document.getElementById('pro-subscribe-btn');
+        if (b && !Subscription.isPro()) { b.textContent = 'Proにアップグレード'; b.disabled = false; }
+      });
+    });
+
+    // Billing portal
+    var portalBtn = document.getElementById('pro-portal-btn');
+    if (portalBtn) {
+      portalBtn.addEventListener('click', function() {
+        Subscription.openBillingPortal();
+      });
+    }
+
+    // Handle Stripe redirect
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('session_id')) {
+      window.history.replaceState({}, '', window.location.pathname);
+      Subscription.checkRedirect();
+    }
+  })();
+  </script>
+</body>
+</html>

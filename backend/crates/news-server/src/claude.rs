@@ -429,6 +429,67 @@ pub async fn generate_dialogue_script(
     Ok(dialogue)
 }
 
+pub async fn generate_murmur(
+    client: &reqwest::Client,
+    api_key: &str,
+    title: &str,
+    description: &str,
+    source: &str,
+) -> Result<String, String> {
+    let prompt = format!(
+        "以下のニュース記事について、カジュアルな独り言を80〜120文字、2〜3文でつぶやいてください。\n\n\
+        ルール:\n\
+        - 「へぇ〜」「マジか」「なるほど〜」「〜だよね」「すごいな〜」など口語体で\n\
+        - ニュースキャスター調は禁止。友達に話すような砕けたトーン\n\
+        - 自分の感想や驚き、ちょっとした疑問を自然に\n\
+        - テキストのみ出力（JSON不要、引用符不要）\n\n\
+        ## 記事\nタイトル: {}\nソース: {}\n概要: {}",
+        title, source, description
+    );
+
+    let request = ClaudeRequest {
+        model: "claude-haiku-4-5-20251001".into(),
+        max_tokens: 256,
+        messages: vec![ClaudeMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    info!(title = %title, "Generating murmur");
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Claude API request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        warn!(status = %status, body = %body, "Claude API error (murmur)");
+        return Err(format!("Claude API error: {} - {}", status, body));
+    }
+
+    let claude_response: ClaudeResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Claude response: {}", e))?;
+
+    let text = claude_response
+        .content
+        .first()
+        .and_then(|b| b.text.as_ref())
+        .ok_or_else(|| "Empty response from Claude".to_string())?;
+
+    info!(chars = text.len(), "Murmur generated");
+    Ok(text.trim().to_string())
+}
+
 pub async fn interpret_command(
     client: &reqwest::Client,
     api_key: &str,

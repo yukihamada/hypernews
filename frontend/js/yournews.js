@@ -129,6 +129,7 @@ const YourNewsApp = (() => {
           chip.classList.add('selected');
         }
         startBtn.classList.toggle('enabled', selected.size > 0);
+        startBtn.textContent = selected.size > 0 ? `はじめる (${selected.size})` : 'はじめる';
       });
 
       chipsContainer.appendChild(chip);
@@ -451,7 +452,7 @@ const YourNewsApp = (() => {
       <div class="yn-hero-article__body">
         ${catLabel ? `<span class="yn-hero-article__category">${escHtml(catLabel)}</span>` : ''}
         <h2 class="yn-hero-article__title">${escHtml(article.title || '')}</h2>
-        ${article.description ? `<p class="yn-hero-article__desc">${escHtml(article.description)}</p>` : ''}
+        ${article.description ? `<p class="yn-hero-article__desc">${escHtml(stripHtml(article.description))}</p>` : ''}
         <div class="yn-hero-article__meta">
           <span class="yn-source-badge">${escHtml(article.source || '')}</span>
           ${timeAgo ? `<span class="yn-hero-article__meta-dot"></span><span>${timeAgo}</span>` : ''}
@@ -492,7 +493,7 @@ const YourNewsApp = (() => {
         </div>
       </div>
       <div class="yn-card__expanded" id="yn-exp-${escAttr(article.id || article.article_id || '')}">
-        ${article.description ? `<p class="yn-card__desc">${escHtml(article.description)}</p>` : ''}
+        ${article.description ? `<p class="yn-card__desc">${escHtml(stripHtml(article.description))}</p>` : ''}
         <button class="yn-card__ai-btn" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v2H8V6a4 4 0 014-4z"/><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 14h.01M15 14h.01"/></svg>
           AI要約を見る
@@ -864,6 +865,11 @@ const YourNewsApp = (() => {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  function stripHtml(str) {
+    if (!str) return '';
+    return str.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   function escAttr(str) {

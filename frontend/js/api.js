@@ -79,13 +79,28 @@ const Api = (() => {
     if (res.status === 402) {
       const data = await res.json().catch(() => ({}));
       if (typeof Subscription !== 'undefined') {
-        Subscription.showUpgradePrompt(feature, data.limit || '?');
+        Subscription.showUpgradePrompt(feature, data.limit || '?', data.tier || 'free');
       }
       throw new Error(data.message || 'rate_limit_exceeded');
     }
   }
 
+  const SUMMARY_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+
   async function summarizeArticles(minutes) {
+    // Check sessionStorage cache first
+    const cacheKey = `hn_summary_${minutes}`;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached.ts && Date.now() - cached.ts < SUMMARY_CACHE_TTL) {
+          return cached.data;
+        }
+        sessionStorage.removeItem(cacheKey);
+      }
+    } catch { /* ignore */ }
+
     const auth = typeof Subscription !== 'undefined' ? Subscription.authHeaders() : {};
     const res = await fetchWithTimeout(`${BASE}/api/articles/summarize`, {
       method: 'POST',
@@ -94,7 +109,14 @@ const Api = (() => {
     }, 30000);
     if (res.status === 402) { await handleRateLimit(res, 'AI要約'); return; }
     if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+    const data = await res.json();
+
+    // Save to sessionStorage cache
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+    } catch { /* quota */ }
+
+    return data;
   }
 
   async function getArticleQuestions(title, description, source, url) {
@@ -192,5 +214,20 @@ const Api = (() => {
     return res.json();
   }
 
-  return { fetchArticles, fetchCategories, sendCommand, applyChange, rejectChange, toggleFeature, summarizeArticles, getArticleQuestions, askArticleQuestion, manageCategory, toReading, listFeeds, addFeed, deleteFeed, toggleFeed };
+  async function getArticleById(id) {
+    const res = await fetch(`${BASE}/api/articles/${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  }
+
+  async function searchArticles(query, limit = 20) {
+    const params = new URLSearchParams();
+    params.set('q', query);
+    params.set('limit', String(limit));
+    const res = await fetch(`${BASE}/api/search?${params}`);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  }
+
+  return { fetchArticles, fetchCategories, searchArticles, getArticleById, sendCommand, applyChange, rejectChange, toggleFeature, summarizeArticles, getArticleQuestions, askArticleQuestion, manageCategory, toReading, listFeeds, addFeed, deleteFeed, toggleFeed };
 })();

@@ -61,6 +61,29 @@ const Commands = (() => {
       Theme.setTheme('lite');
       return { response: 'Liteテーマに変更しました。' };
     }
+    if (/ターミナル|terminal/.test(msg)) {
+      Theme.setTheme('terminal');
+      return { response: 'Terminalテーマに変更しました。' };
+    }
+    if (/マガジン|magazine|雑誌/.test(msg)) {
+      Theme.setTheme('magazine');
+      return { response: 'Magazineテーマに変更しました。' };
+    }
+    if (/ブルータリスト|brutalist/.test(msg)) {
+      Theme.setTheme('brutalist');
+      return { response: 'Brutalistテーマに変更しました。' };
+    }
+    if (/パステル|pastel/.test(msg)) {
+      Theme.setTheme('pastel');
+      return { response: 'Pastelテーマに変更しました。' };
+    }
+    if (/ネオン|neon|サイバー/.test(msg)) {
+      Theme.setTheme('neon');
+      return { response: 'Neonテーマに変更しました。' };
+    }
+    if (/ランダム|random|おまかせ|シャッフル/.test(msg) && /(テーマ|theme|表示|にして|して|変更)?/.test(msg)) {
+      return { action: 'random_theme' };
+    }
 
     // --- Font size ---
     if (/文字.*(大き|おおき|拡大)|font\s*size\s*up|bigger|larger/.test(msg)) {
@@ -108,26 +131,6 @@ const Commands = (() => {
     if (/イケボ|ikebo/.test(msg)) {
       Tts.setStyle('web:ikebo');
       return { response: 'ボイスを「イケボ」に設定しました。' };
-    }
-
-    // --- OGP image toggle ---
-    if (/画像.*(表示|見せ|オン|有効)|show\s*image/.test(msg)) {
-      Api.toggleFeature('ogp_enrichment', true);
-      return { response: 'OGP画像表示を有効にしました。次回の取得から反映されます。' };
-    }
-    if (/画像.*(非表示|隠|オフ|無効)|hide\s*image/.test(msg)) {
-      Api.toggleFeature('ogp_enrichment', false);
-      return { response: 'OGP画像表示を無効にしました。次回の取得から反映されます。' };
-    }
-
-    // --- Grouping toggle ---
-    if (/まとめ|グルーピング.*(有効|オン)|group/.test(msg) && !/無効|オフ|off/.test(msg)) {
-      Api.toggleFeature('grouping', true);
-      return { response: 'ニュースグルーピングを有効にしました。' };
-    }
-    if (/(まとめ|グルーピング).*(無効|オフ|解除|off)|ungroup/.test(msg)) {
-      Api.toggleFeature('grouping', false);
-      return { response: 'ニュースグルーピングを無効にしました。' };
     }
 
     // --- Category filter ---
@@ -268,6 +271,14 @@ const Commands = (() => {
       return { response: '記事を再読み込みしました。' };
     }
 
+    // --- Google login/logout ---
+    if (/ログイン|login|サインイン|sign\s*in|google.*(ログイン|認証)|認証/.test(msg) && !/ログアウト|logout|sign\s*out/.test(msg)) {
+      return { action: 'google_login', response: 'Googleログイン画面を表示します...' };
+    }
+    if (/ログアウト|logout|サインアウト|sign\s*out/.test(msg)) {
+      return { action: 'google_logout', response: 'ログアウトします...' };
+    }
+
     // --- Subscription ---
     if (/プロ|pro|サブスク|subscribe|課金|アップグレード|upgrade/.test(msg) && !/解約|キャンセル|cancel|管理|portal/.test(msg)) {
       return { action: 'subscribe', response: 'Proプランのチェックアウトを開きます...' };
@@ -341,14 +352,13 @@ const Commands = (() => {
 
 【見た目】
 • 「ダークモードにして」— ダーク/ライト切替
-• 「カード表示にして」— テーマ切替 (hacker/card/lite)
+• 「カード表示にして」— テーマ切替 (8種類)
+• 「ランダム」— テーマをランダムに変更
 • 「文字を大きくして」— フォントサイズ変更
 • 「アクセント 青」— アクセントカラー変更
 • 「コンパクト表示にして」— レイアウト密度変更
 
 【コンテンツ】
-• 「画像を表示」— OGP画像の表示/非表示
-• 「ニュースをまとめる」— グルーピングの有効/無効
 • 「テクノロジーだけ表示して」— カテゴリフィルタ
 • 「フィルタ解除」— 全記事表示
 • 「5分ごと自動更新」— 自動更新設定
@@ -374,6 +384,10 @@ const Commands = (() => {
 • 「ブックマーククリア」— ブックマーク全削除
 • 「キャッシュクリア」— AIキャッシュ削除
 • 「プロンプト設定: ...」— AIカスタムプロンプト設定
+
+【アカウント】
+• 「ログイン」— Googleでログイン（制限2倍）
+• 「ログアウト」— ログアウト
 
 【その他】
 • 「設定を開く」— 設定画面へ移動

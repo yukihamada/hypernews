@@ -15,10 +15,16 @@ const App = (() => {
   let isOffline = !navigator.onLine;
   let autoRefreshTimer = null;
   let currentDetailArticle = null;
+  let searchDebounceTimer = null;
+  let isSearchMode = false;
+  let bookmarkPanelOpen = false;
 
   const els = {};
 
   function init() {
+    if (typeof ErrorTracker !== 'undefined') ErrorTracker.init();
+    if (typeof Vitals !== 'undefined') Vitals.init();
+
     // Branch to dedicated UI for each site
     if (typeof Site !== 'undefined') {
       const s = Site.id;
@@ -45,6 +51,17 @@ const App = (() => {
     els.detailImgWrap = document.getElementById('detail-img-wrap');
     els.detailQuestions = document.getElementById('detail-questions');
     els.detailAnswers = document.getElementById('detail-answers');
+    els.searchToggle = document.getElementById('search-toggle');
+    els.searchBar = document.getElementById('search-bar');
+    els.searchInput = document.getElementById('search-input');
+    els.searchClear = document.getElementById('search-clear');
+    els.bookmarkToggle = document.getElementById('bookmark-toggle');
+    els.bookmarkPanel = document.getElementById('bookmark-panel');
+    els.bookmarkOverlay = document.getElementById('bookmark-overlay');
+    els.bookmarkList = document.getElementById('bookmark-list');
+    els.bookmarkClose = document.getElementById('bookmark-close');
+    els.bookmarkClearBtn = document.getElementById('bookmark-clear-btn');
+    els.bookmarkFooter = document.getElementById('bookmark-footer');
 
     // Apply stored preferences
     Theme.apply();
@@ -68,6 +85,18 @@ const App = (() => {
 
     // Load articles
     loadArticles();
+
+    // Handle /article/:id permalink on page load
+    checkArticlePermalink();
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', (e) => {
+      if (e.state && e.state.articleId) {
+        loadArticleById(e.state.articleId);
+      } else if (detailOpen) {
+        closeDetail();
+      }
+    });
 
     // Category nav click
     els.nav.addEventListener('click', (e) => {
@@ -154,12 +183,13 @@ const App = (() => {
       e.preventDefault();
       detailTrigger = link;
       openDetail({
+        id: articleEl?.dataset.articleId || '',
         title: link.textContent,
         url: link.href,
         source: articleEl?.querySelector('.article-source')?.textContent || '',
         time: articleEl?.querySelector('time')?.textContent || '',
         description: articleEl?.querySelector('.article-desc')?.textContent || '',
-        imageUrl: articleEl?.querySelector('.article-img')?.src || '',
+        imageUrl: articleEl?.querySelector('.article-img-wrap .article-img')?.src || '',
       });
     });
 
@@ -173,6 +203,13 @@ const App = (() => {
     // Subscription: check redirect + show Pro badge
     Subscription.checkRedirect();
     Subscription.updateProBadge();
+
+    // Google Auth + Konami
+    if (typeof GoogleAuth !== 'undefined') GoogleAuth.init();
+    if (typeof Konami !== 'undefined') Konami.init();
+
+    // Ads init (Free users only)
+    if (typeof Ads !== 'undefined') Ads.init();
 
     // Mode toggle button
     const modeToggle = document.getElementById('mode-toggle');
@@ -220,6 +257,53 @@ const App = (() => {
     // Chat init
     Chat.init();
 
+    // Search toggle + input handlers
+    if (els.searchToggle && els.searchBar && els.searchInput) {
+      els.searchToggle.addEventListener('click', toggleSearch);
+
+      els.searchInput.addEventListener('input', () => {
+        const q = els.searchInput.value.trim();
+        els.searchClear.hidden = !q;
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          if (q.length > 0) {
+            performSearch(q);
+          } else {
+            exitSearch();
+          }
+        }, 300);
+      });
+
+      els.searchClear.addEventListener('click', () => {
+        els.searchInput.value = '';
+        els.searchClear.hidden = true;
+        exitSearch();
+        els.searchInput.focus();
+      });
+
+      // Cmd/Ctrl+K to toggle search
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+          e.preventDefault();
+          toggleSearch();
+        }
+      });
+    }
+
+    // Bookmark panel handlers
+    if (els.bookmarkToggle && els.bookmarkPanel) {
+      els.bookmarkToggle.addEventListener('click', openBookmarkPanel);
+      els.bookmarkClose.addEventListener('click', closeBookmarkPanel);
+      els.bookmarkOverlay.addEventListener('click', closeBookmarkPanel);
+      els.bookmarkClearBtn.addEventListener('click', () => {
+        Bookmarks.clear();
+        renderBookmarkList();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && bookmarkPanelOpen) closeBookmarkPanel();
+      });
+    }
+
     // Auto-refresh setup
     setupAutoRefresh();
 
@@ -229,10 +313,109 @@ const App = (() => {
     // Battery saving
     setupBatterySaving();
 
-    // Prefetch categories for offline after idle
+    // Prefetch categories for offline after idle + prefetch 3-min summary
     if (navigator.onLine) {
       const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 2000));
-      idle(() => prefetchForOffline());
+      idle(() => {
+        prefetchForOffline();
+        Api.summarizeArticles(3).catch(() => {});
+      });
+    }
+  }
+
+  // --- Search ---
+
+  function toggleSearch() {
+    const isOpen = els.searchBar.classList.contains('open');
+    if (isOpen) {
+      closeSearch();
+    } else {
+      els.searchBar.hidden = false;
+      requestAnimationFrame(() => {
+        els.searchBar.classList.add('open');
+        els.searchToggle.classList.add('active');
+        els.searchInput.focus();
+      });
+    }
+  }
+
+  function closeSearch() {
+    els.searchBar.classList.remove('open');
+    els.searchToggle.classList.remove('active');
+    els.searchInput.value = '';
+    els.searchClear.hidden = true;
+    if (isSearchMode) exitSearch();
+    setTimeout(() => { els.searchBar.hidden = true; }, 250);
+  }
+
+  async function performSearch(query) {
+    isSearchMode = true;
+    els.loadMoreWrap.style.display = 'none';
+    els.sentinel.style.display = 'none';
+    Renderer.renderSkeletons(els.articles);
+    try {
+      const data = await Api.searchArticles(query);
+      Renderer.render(els.articles, data.articles, false);
+      // Observe for read tracking
+      const hideRead = Storage.get('hideReadArticles');
+      els.articles.querySelectorAll('.article:not([data-observed])').forEach(el => {
+        el.dataset.observed = '1';
+        readObserver.observe(el);
+        if (el.dataset.articleId && ReadHistory.isRead(el.dataset.articleId)) {
+          el.classList.add('read');
+          if (hideRead) el.style.display = 'none';
+        }
+      });
+    } catch {
+      els.articles.innerHTML = '<div class="loading">検索に失敗しました</div>';
+    }
+  }
+
+  function exitSearch() {
+    if (!isSearchMode) return;
+    isSearchMode = false;
+    loadArticles();
+  }
+
+  // --- Bookmark Panel ---
+
+  function openBookmarkPanel() {
+    bookmarkPanelOpen = true;
+    renderBookmarkList();
+    els.bookmarkPanel.hidden = false;
+    els.bookmarkOverlay.hidden = false;
+    requestAnimationFrame(() => {
+      els.bookmarkPanel.classList.add('open');
+      els.bookmarkOverlay.classList.add('open');
+    });
+  }
+
+  function closeBookmarkPanel() {
+    bookmarkPanelOpen = false;
+    els.bookmarkPanel.classList.remove('open');
+    els.bookmarkOverlay.classList.remove('open');
+    setTimeout(() => {
+      els.bookmarkPanel.hidden = true;
+      els.bookmarkOverlay.hidden = true;
+    }, 250);
+  }
+
+  function renderBookmarkList() {
+    const all = Bookmarks.getAll();
+    if (all.length === 0) {
+      els.bookmarkList.innerHTML = '<div class="bookmark-empty">ブックマークした記事はありません</div>';
+      els.bookmarkFooter.hidden = true;
+      return;
+    }
+    els.bookmarkFooter.hidden = false;
+    els.bookmarkList.innerHTML = '';
+    for (const bm of all) {
+      const item = document.createElement('div');
+      item.className = 'bookmark-item';
+      item.innerHTML =
+        `<div class="bookmark-item-title"><a href="${Renderer.escHtml(bm.url)}" target="_blank" rel="noopener">${Renderer.escHtml(bm.title)}</a></div>` +
+        `<div class="bookmark-item-meta">${Renderer.escHtml(bm.source || '')}</div>`;
+      els.bookmarkList.appendChild(item);
     }
   }
 
@@ -342,6 +525,10 @@ const App = (() => {
 
       Renderer.render(els.articles, data.articles, append);
       if (!append) injectJsonLd(data.articles);
+      // Show banner ad below articles (first load only)
+      if (!append && typeof Ads !== 'undefined') {
+        Ads.showBannerAd(els.articles.parentNode);
+      }
       currentCursor = data.next_cursor || null;
       els.loadMoreWrap.style.display = currentCursor ? '' : 'none';
       els.sentinel.style.display = currentCursor ? '' : 'none';
@@ -445,6 +632,11 @@ const App = (() => {
     els.detailQuestions.innerHTML = '<div class="detail-loading">質問を生成中</div>';
     els.detailAnswers.innerHTML = '';
 
+    // Push permalink URL
+    if (article.id) {
+      history.pushState({ articleId: article.id }, '', `/article/${article.id}`);
+    }
+
     els.detailPanel.hidden = false;
     els.detailOverlay.hidden = false;
     requestAnimationFrame(() => {
@@ -476,6 +668,38 @@ const App = (() => {
     if (detailTrigger) {
       detailTrigger.focus();
       detailTrigger = null;
+    }
+    // Restore URL
+    if (location.pathname.startsWith('/article/')) {
+      history.pushState(null, '', '/');
+    }
+  }
+
+  function checkArticlePermalink() {
+    const match = location.pathname.match(/^\/article\/(.+)$/);
+    if (match) {
+      loadArticleById(decodeURIComponent(match[1]));
+    }
+  }
+
+  async function loadArticleById(id) {
+    try {
+      const data = await Api.getArticleById(id);
+      if (data.article) {
+        const a = data.article;
+        const proxyImg = a.image_url ? '/api/image-proxy?url=' + encodeURIComponent(a.image_url) : '';
+        openDetail({
+          id: a.id,
+          title: a.title,
+          url: a.url,
+          source: a.source,
+          time: a.published_at ? new Date(a.published_at).toLocaleString('ja-JP') : '',
+          description: a.description || '',
+          imageUrl: proxyImg,
+        });
+      }
+    } catch {
+      // Article not found — stay on main page
     }
   }
 
@@ -519,25 +743,22 @@ const App = (() => {
   }
 
   async function askQuestion(article, question) {
-    // Consume 1 token
-    EcoSystem.consumeToken();
-
     const block = document.createElement('div');
     block.className = 'detail-answer-block';
     block.innerHTML = `<div class="detail-answer-q">${Renderer.escHtml(question)}</div><div class="detail-answer-loading">回答を生成中</div>`;
     els.detailAnswers.appendChild(block);
     block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    // Also scroll the detail-body container to show the answer
     const detailBody = els.detailPanel.querySelector('.detail-body');
     if (detailBody) {
       detailBody.scrollTop = detailBody.scrollHeight;
     }
 
-    // Check query cache first
+    // Check cache FIRST — earn tokens on hit
     const cacheKey = `${article.title}|${question}`;
     const cached = EcoSystem.getQueryCache(cacheKey);
 
     if (cached) {
+      EcoSystem.earnFromCache();
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
         loading.className = 'detail-answer-a';
@@ -547,10 +768,27 @@ const App = (() => {
       return;
     }
 
+    // Cache miss — check token balance
+    if (!EcoSystem.canAfford('ask')) {
+      const loading = block.querySelector('.detail-answer-loading');
+      if (loading) {
+        loading.className = 'detail-answer-a';
+        loading.style.color = 'var(--muted)';
+        loading.innerHTML = 'トークン不足です。<a href="/pro.html" style="color:var(--accent);text-decoration:underline">Proプラン</a>で無制限に。';
+      }
+      return;
+    }
+
+    // Spend tokens
+    EcoSystem.spend('ask');
+
     try {
-      const data = await Api.askArticleQuestion(article.title, article.description, article.source, question, article.url);
+      // Fetch AI answer and related articles in parallel
+      const [data, searchData] = await Promise.all([
+        Api.askArticleQuestion(article.title, article.description, article.source, question, article.url),
+        Api.searchArticles(question, 5).catch(() => ({ articles: [] })),
+      ]);
       const answer = data.answer || '回答を取得できませんでした';
-      // Cache the answer
       EcoSystem.setQueryCache(cacheKey, answer);
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
@@ -558,7 +796,14 @@ const App = (() => {
         loading.textContent = '';
         typewriterEffect(loading, answer);
       }
+      // Show related articles from search
+      const related = (searchData.articles || []).filter(a => a.url !== article.url).slice(0, 3);
+      if (related.length > 0) {
+        appendRelatedArticles(block, related);
+      }
     } catch {
+      // Refund tokens on API failure
+      EcoSystem.refund('ask');
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
         loading.className = 'detail-answer-a';
@@ -581,8 +826,34 @@ const App = (() => {
     }
   }
 
+  function appendRelatedArticles(block, articles) {
+    const wrap = document.createElement('div');
+    wrap.className = 'detail-related';
+    wrap.innerHTML = '<div class="detail-related-label">関連記事</div>';
+    for (const a of articles) {
+      const link = document.createElement('a');
+      link.className = 'detail-related-item';
+      link.href = a.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.innerHTML = `<span class="detail-related-source">${Renderer.escHtml(a.source)}</span> ${Renderer.escHtml(a.title)}`;
+      wrap.appendChild(link);
+    }
+    block.appendChild(wrap);
+  }
+
   /** Shared answer fetch logic for askQuestion and retry */
   async function fetchAnswer(article, question, block) {
+    if (!EcoSystem.canAfford('ask')) {
+      const loading = block.querySelector('.detail-answer-loading');
+      if (loading) {
+        loading.className = 'detail-answer-a';
+        loading.style.color = 'var(--muted)';
+        loading.innerHTML = 'トークン不足です。<a href="/pro.html" style="color:var(--accent);text-decoration:underline">Proプラン</a>で無制限に。';
+      }
+      return;
+    }
+    EcoSystem.spend('ask');
     const cacheKey = `${article.title}|${question}`;
     try {
       const data = await Api.askArticleQuestion(article.title, article.description, article.source, question, article.url);
@@ -595,6 +866,7 @@ const App = (() => {
         typewriterEffect(loading, answer);
       }
     } catch {
+      EcoSystem.refund('ask');
       const loading = block.querySelector('.detail-answer-loading');
       if (loading) {
         loading.className = 'detail-answer-a';
@@ -677,25 +949,49 @@ const App = (() => {
 })();
 
 /**
- * EcoSystem — Token economy, query caching, smart cache management
- * - Cache hit rate: 0-99% configurable (default 20%)
- * - Lower cache rate = more eco points
- * - 1 query = 1 token
- * - Articles with <30% view probability → cache dropped
- * - Offline miss on dropped cache → earn tokens when back online
+ * EcoSystem — AI Token Economy
+ *
+ * Core mechanic:
+ *   AI問い合わせ → トークン消費
+ *   キャッシュヒット → トークン獲得
+ *
+ * This creates a sustainable loop: popular queries get cached,
+ * cache hits earn tokens, which fund new unique queries.
+ *
+ * Costs:  ask=3, questions=2, summarize=5, tts=2, podcast=5
+ * Reward: cache hit = +2 tokens
+ * Daily:  +15 tokens (cap 100)
  */
 const EcoSystem = (() => {
   const STORAGE_KEY = 'hn_eco';
-  let state = {
-    tokens: 100,       // Starting tokens
-    ecoPoints: 0,      // Eco points earned
-    cacheRate: 20,     // 0-99%, default 20%
-    queryCache: {},     // { key: { answer, ts } }
-    viewStats: {},      // { articleId: { views: N, shown: N } }
-    offlineQueue: [],   // Articles clicked offline that were cache-dropped
-    totalQueries: 0,
-    cacheHits: 0,
+  const INITIAL_TOKENS = 30;
+  const MAX_TOKENS = 100;
+  const DAILY_REFILL = 15;
+  const CACHE_REWARD = 2;
+  const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+  const COSTS = {
+    ask: 3,
+    questions: 2,
+    summarize: 5,
+    tts: 2,
+    podcast: 5,
   };
+
+  let state = {
+    tokens: INITIAL_TOKENS,
+    totalEarned: 0,
+    totalSpent: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    queryCache: {},
+    lastRefill: null,
+    konamiActive: false,
+  };
+
+  function getMaxTokens() {
+    return state.konamiActive ? 10000 : MAX_TOKENS;
+  }
 
   function init() {
     try {
@@ -705,6 +1001,7 @@ const EcoSystem = (() => {
         state = { ...state, ...saved };
       }
     } catch { /* ignore */ }
+    checkDailyRefill();
     renderEcoStatus();
   }
 
@@ -714,101 +1011,95 @@ const EcoSystem = (() => {
     } catch { /* quota */ }
   }
 
-  function consumeToken() {
-    state.totalQueries++;
-    if (state.tokens > 0) state.tokens--;
-    // Award eco points based on inverse cache rate
-    // Lower cache rate = more eco points per query
-    const ecoMultiplier = Math.max(1, Math.floor((100 - state.cacheRate) / 10));
-    state.ecoPoints += ecoMultiplier;
+  function checkDailyRefill() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (state.lastRefill !== today) {
+      const before = state.tokens;
+      state.tokens = Math.min(state.tokens + DAILY_REFILL, getMaxTokens());
+      state.lastRefill = today;
+      save();
+      if (state.tokens > before) {
+        setTimeout(() => animateChange(state.tokens - before), 500);
+      }
+    }
+  }
+
+  /** Check if user can afford a feature */
+  function canAfford(feature) {
+    if (typeof Subscription !== 'undefined' && Subscription.isPro()) return true;
+    return state.tokens >= (COSTS[feature] || 1);
+  }
+
+  /** Spend tokens for an AI query (cache miss) */
+  function spend(feature) {
+    if (typeof Subscription !== 'undefined' && Subscription.isPro()) return;
+    const cost = COSTS[feature] || 1;
+    state.tokens = Math.max(0, state.tokens - cost);
+    state.totalSpent += cost;
+    state.cacheMisses++;
     save();
     renderEcoStatus();
+    animateChange(-cost);
+  }
+
+  /** Refund tokens on API failure */
+  function refund(feature) {
+    if (typeof Subscription !== 'undefined' && Subscription.isPro()) return;
+    const cost = COSTS[feature] || 1;
+    state.tokens = Math.min(state.tokens + cost, getMaxTokens());
+    state.totalSpent -= cost;
+    state.cacheMisses--;
+    save();
+    renderEcoStatus();
+    animateChange(+cost);
+  }
+
+  /** Earn tokens from a cache hit */
+  function earnFromCache() {
+    if (typeof Subscription !== 'undefined' && Subscription.isPro()) return;
+    state.tokens = Math.min(state.tokens + CACHE_REWARD, getMaxTokens());
+    state.totalEarned += CACHE_REWARD;
+    state.cacheHits++;
+    save();
+    renderEcoStatus();
+    animateChange(+CACHE_REWARD);
+  }
+
+  /** Award konami bonus tokens */
+  function awardKonami(amount) {
+    state.konamiActive = true;
+    state.tokens = Math.min(state.tokens + amount, 10000);
+    state.totalEarned += amount;
+    save();
+    renderEcoStatus();
+    animateChange(+amount);
   }
 
   function getQueryCache(key) {
     const entry = state.queryCache[key];
     if (!entry) return null;
-    state.cacheHits++;
-    save();
+    if (Date.now() - entry.ts > CACHE_TTL) {
+      delete state.queryCache[key];
+      save();
+      return null;
+    }
     return entry.answer;
   }
 
   function setQueryCache(key, answer) {
     state.queryCache[key] = { answer, ts: Date.now() };
-    // Prune old cache entries (keep latest 500)
     const entries = Object.entries(state.queryCache);
-    if (entries.length > 500) {
+    if (entries.length > 300) {
       entries.sort((a, b) => a[1].ts - b[1].ts);
-      const toRemove = entries.slice(0, entries.length - 500);
-      for (const [k] of toRemove) delete state.queryCache[k];
-    }
-    save();
-  }
-
-  function setCacheRate(rate) {
-    state.cacheRate = Math.max(0, Math.min(99, Math.floor(rate)));
-    save();
-    renderEcoStatus();
-  }
-
-  function getCacheRate() {
-    return state.cacheRate;
-  }
-
-  function recordView(articleId) {
-    if (!state.viewStats[articleId]) {
-      state.viewStats[articleId] = { views: 0, shown: 0 };
-    }
-    state.viewStats[articleId].views++;
-    save();
-  }
-
-  function recordShown(articleId) {
-    if (!state.viewStats[articleId]) {
-      state.viewStats[articleId] = { views: 0, shown: 0 };
-    }
-    state.viewStats[articleId].shown++;
-    save();
-  }
-
-  /** Get view probability for an article (views / shown) */
-  function getViewProbability(articleId) {
-    const s = state.viewStats[articleId];
-    if (!s || s.shown === 0) return 0.5; // unknown → assume 50%
-    return s.views / s.shown;
-  }
-
-  /** Should this article's cache be kept? */
-  function shouldKeepCache(articleId) {
-    return getViewProbability(articleId) >= 0.3;
-  }
-
-  /** Record offline miss — user clicked article that had no cache */
-  function recordOfflineMiss(articleId) {
-    if (!state.offlineQueue.includes(articleId)) {
-      state.offlineQueue.push(articleId);
-      save();
-    }
-  }
-
-  /** Process pending offline queue when back online — award tokens */
-  function processOfflineQueue() {
-    if (state.offlineQueue.length === 0) return;
-    const earned = state.offlineQueue.length;
-    state.tokens += earned;
-    // Learn: these articles should be cached next time
-    for (const id of state.offlineQueue) {
-      if (!state.viewStats[id]) {
-        state.viewStats[id] = { views: 0, shown: 0 };
+      for (const [k] of entries.slice(0, entries.length - 300)) {
+        delete state.queryCache[k];
       }
-      // Boost view count to increase future cache probability
-      state.viewStats[id].views += 3;
-      state.viewStats[id].shown += 1;
     }
-    state.offlineQueue = [];
     save();
-    renderEcoStatus();
   }
+
+  function recordView() { /* noop — kept for compat */ }
+  function processOfflineQueue() { /* noop */ }
 
   function renderEcoStatus() {
     let badge = document.getElementById('eco-status');
@@ -818,18 +1109,34 @@ const EcoSystem = (() => {
       badge.className = 'eco-status';
       document.body.appendChild(badge);
     }
-    badge.innerHTML =
-      `<span class="eco-tokens" title="トークン残量">${state.tokens}T</span>` +
-      `<span class="eco-points" title="エコポイント（キャッシュ率${state.cacheRate}%）">${state.ecoPoints}EP</span>`;
+    const total = state.cacheHits + state.cacheMisses;
+    const hitRate = total > 0 ? Math.round(state.cacheHits / total * 100) : 0;
+    const isPro = typeof Subscription !== 'undefined' && Subscription.isPro();
+    const low = !isPro && state.tokens <= 5;
+    badge.innerHTML = isPro
+      ? `<span class="eco-tokens eco-tokens--pro" title="Pro: 無制限">∞<small>T</small></span>` +
+        `<span class="eco-hitrate" title="キャッシュヒット率 ${state.cacheHits}/${total}">${hitRate}%<small>HIT</small></span>`
+      : `<span class="eco-tokens${low ? ' eco-tokens--low' : ''}" title="AIトークン（毎日+${DAILY_REFILL}）">${state.tokens}<small>T</small></span>` +
+        `<span class="eco-hitrate" title="キャッシュヒット率 ${state.cacheHits}/${total}">${hitRate}%<small>HIT</small></span>`;
+  }
+
+  function animateChange(delta) {
+    const badge = document.getElementById('eco-status');
+    if (!badge) return;
+    const popup = document.createElement('span');
+    popup.className = 'eco-popup ' + (delta > 0 ? 'eco-popup--earn' : 'eco-popup--spend');
+    popup.textContent = delta > 0 ? `+${delta}` : `${delta}`;
+    badge.appendChild(popup);
+    popup.addEventListener('animationend', () => popup.remove());
+    setTimeout(() => popup.remove(), 1500);
   }
 
   function getState() { return { ...state }; }
 
   return {
-    init, consumeToken, getQueryCache, setQueryCache,
-    setCacheRate, getCacheRate,
-    recordView, recordShown, getViewProbability, shouldKeepCache,
-    recordOfflineMiss, processOfflineQueue,
-    getState, save,
+    init, canAfford, spend, refund, earnFromCache,
+    getQueryCache, setQueryCache,
+    recordView, processOfflineQueue,
+    getState, save, renderEcoStatus, awardKonami,
   };
 })();

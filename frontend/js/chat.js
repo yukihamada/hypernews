@@ -9,32 +9,38 @@ const Chat = (() => {
   let currentStep = 0;
 
   const SUGGESTIONS = [
-    // Step 0: 見た目
+    // Step 0: テーマ選択 — 8テーマ + ランダム
     [
-      { label: 'ダークモード', command: 'ダークモードにして' },
-      { label: 'ハッカー風', command: 'ハッカー風にして' },
-      { label: 'コンパクト表示', command: 'コンパクト表示にして' },
+      { label: 'Hacker', command: 'ハッカー風にして' },
+      { label: 'Card', command: 'カード表示にして' },
+      { label: 'Lite', command: 'ライト表示にして' },
+      { label: 'Terminal', command: 'ターミナルにして' },
+      { label: 'Magazine', command: 'マガジンにして' },
+      { label: 'Brutalist', command: 'ブルータリストにして' },
+      { label: 'Pastel', command: 'パステルにして' },
+      { label: 'Neon', command: 'ネオンにして' },
+      { label: 'Random!', action: 'random_theme' },
+    ],
+    // Step 1: カスタマイズ — モード, カラー, フォントサイズ, 次へ
+    [
+      { label: 'ダーク/ライト切替', command: 'モード切替にして' },
       { label: 'アクセントカラー', action: 'color_picker' },
+      { label: '文字サイズ調整', action: 'font_size_picker' },
+      { label: '次へ →', action: 'skip_step' },
     ],
-    // Step 1: コンテンツ
+    // Step 2: AI機能
     [
-      { label: '画像を表示', feature: { name: 'ogp_enrichment', enabled: true, label: 'OGP画像表示' } },
-      { label: '文字を大きく', command: '文字を大きくして' },
-      { label: 'ニュースをまとめる', feature: { name: 'grouping', enabled: true, label: 'ニュースグルーピング' } },
-      { label: '5分自動更新', action: 'auto_refresh', minutes: 5 },
-    ],
-    // Step 2: 音声
-    [
-      { label: 'ボイスを選ぶ', action: 'voice_picker' },
       { label: '3分ニュース', action: 'summarize', minutes: 3 },
-      { label: '読み上げOFF', voice: 'off' },
+      { label: 'ボイスを選ぶ', action: 'voice_picker' },
+      { label: '利用状況', action: 'show_usage' },
+      { label: 'Googleログイン', action: 'google_login' },
     ],
     // Step 3: 管理
     [
+      { label: '5分自動更新', action: 'auto_refresh', minutes: 5 },
       { label: 'カテゴリ管理', action: 'category_list' },
       { label: 'ブックマーク一覧', action: 'bookmark_list' },
-      { label: '設定リセット', action: 'settings_reset' },
-      { label: 'これでOK', command: null },
+      { label: '完了', command: null },
     ],
   ];
 
@@ -107,6 +113,11 @@ const Chat = (() => {
         showVoicePicker();
         return;
       }
+      if (result.action === 'random_theme') {
+        const r = Theme.randomize();
+        addMessage(`ランダム設定: テーマ=${r.theme}, モード=${r.mode}, アクセント=${r.accent}`, 'bot');
+        return;
+      }
       if (result.action === 'color_picker') {
         addMessage(result.response, 'bot');
         showColorPicker();
@@ -119,6 +130,27 @@ const Chat = (() => {
       }
       if (result.action === 'settings_reset') {
         handleSettingsReset();
+        return;
+      }
+      if (result.action === 'google_login') {
+        if (typeof GoogleAuth !== 'undefined' && GoogleAuth.isAuthenticated()) {
+          addMessage('既にGoogleでログイン済みです。', 'bot');
+        } else if (typeof GoogleAuth !== 'undefined') {
+          addMessage('Googleログイン画面を表示します...', 'bot');
+          const container = document.createElement('div');
+          container.style.padding = '8px 0';
+          suggestionsEl.innerHTML = '';
+          suggestionsEl.appendChild(container);
+          GoogleAuth.renderButton(container);
+          GoogleAuth.showOneTap();
+        }
+        return;
+      }
+      if (result.action === 'google_logout') {
+        if (typeof GoogleAuth !== 'undefined') {
+          GoogleAuth.signOut();
+          addMessage('Googleアカウントからログアウトしました。', 'bot');
+        }
         return;
       }
       if (result.action === 'subscribe') {
@@ -291,6 +323,30 @@ const Chat = (() => {
 
     addMessage(item.label, 'user');
 
+    // Random theme chip — stay on step 0 for re-roll
+    if (item.action === 'random_theme') {
+      const result = Theme.randomize();
+      addMessage(`ランダム設定: テーマ=${result.theme}, モード=${result.mode}, アクセント=${result.accent}`, 'bot');
+      showSuggestions(0);
+      return;
+    }
+
+    // Font size picker chip
+    if (item.action === 'font_size_picker') {
+      addMessage('文字サイズを調整してください。', 'bot');
+      showFontSizePicker();
+      return;
+    }
+
+    // Skip to next step
+    if (item.action === 'skip_step') {
+      const nextStep = currentStep + 1;
+      if (nextStep < SUGGESTIONS.length) {
+        showSuggestions(nextStep);
+      }
+      return;
+    }
+
     // Voice picker chip
     if (item.action === 'voice_picker') {
       showVoicePicker();
@@ -332,6 +388,35 @@ const Chat = (() => {
     if (item.action === 'auto_refresh') {
       App.setAutoRefresh(item.minutes);
       addMessage(`${item.minutes}分ごとに自動更新します。`, 'bot');
+      const nextStep = currentStep + 1;
+      if (nextStep < SUGGESTIONS.length) showSuggestions(nextStep);
+      return;
+    }
+
+    // Google login chip
+    if (item.action === 'google_login') {
+      if (typeof GoogleAuth !== 'undefined' && GoogleAuth.isAuthenticated()) {
+        addMessage('既にGoogleでログイン済みです。', 'bot');
+      } else if (typeof GoogleAuth !== 'undefined') {
+        addMessage('Googleログイン画面を表示します...', 'bot');
+        const container = document.createElement('div');
+        container.style.padding = '8px 0';
+        suggestionsEl.innerHTML = '';
+        suggestionsEl.appendChild(container);
+        GoogleAuth.renderButton(container);
+        GoogleAuth.showOneTap();
+      } else {
+        addMessage('Google認証機能は現在利用できません。', 'bot');
+      }
+      return;
+    }
+
+    // Google logout chip
+    if (item.action === 'google_logout') {
+      if (typeof GoogleAuth !== 'undefined') {
+        GoogleAuth.signOut();
+        addMessage('Googleアカウントからログアウトしました。', 'bot');
+      }
       const nextStep = currentStep + 1;
       if (nextStep < SUGGESTIONS.length) showSuggestions(nextStep);
       return;
@@ -385,16 +470,7 @@ const Chat = (() => {
       return;
     }
 
-    if (item.feature) {
-      // Direct feature toggle (no Claude API needed)
-      try {
-        const result = await Api.toggleFeature(item.feature.name, item.feature.enabled);
-        const label = item.feature.enabled ? '有効' : '無効';
-        addMessage(`${item.feature.label}を${label}にしました。`, 'bot');
-      } catch (err) {
-        addMessage(`エラー: ${err.message}`, 'bot');
-      }
-    } else if (item.server) {
+    if (item.server) {
       // Server-side command (Claude API)
       addMessage('考え中...', 'bot thinking');
       try {
@@ -510,6 +586,9 @@ const Chat = (() => {
     if (data.tier === 'pro') {
       addMessage('Proプラン: すべてのAI機能が無制限でご利用いただけます。', 'bot');
       return;
+    }
+    if (data.tier === 'authenticated') {
+      addMessage('Googleログイン済み: 制限が2倍に拡大されています。', 'bot');
     }
     const features = { summarize: 'AI要約', questions: 'AI質問', ask: 'AI回答', tts: 'TTS', to_reading: '読み変換' };
     let msg = '本日の利用状況:\n';
@@ -627,6 +706,47 @@ const Chat = (() => {
         const nextStep = currentStep + 1;
         if (nextStep < SUGGESTIONS.length) showSuggestions(nextStep);
       });
+      suggestionsEl.appendChild(btn);
+    }
+  }
+
+  function showFontSizePicker() {
+    suggestionsEl.innerHTML = '';
+    const current = Storage.get('fontSize');
+    const items = [
+      { label: '最小 (10px)', size: 10 },
+      { label: '小さく', delta: -2 },
+      { label: `現在: ${current}px`, disabled: true },
+      { label: '大きく', delta: 2 },
+      { label: '最大 (32px)', size: 32 },
+      { label: '完了', done: true },
+    ];
+    for (const item of items) {
+      const btn = document.createElement('button');
+      btn.className = 'chat-chip';
+      btn.type = 'button';
+      btn.textContent = item.label;
+      if (item.disabled) {
+        btn.disabled = true;
+      } else if (item.done) {
+        btn.classList.add('chip-accent');
+        btn.addEventListener('click', () => {
+          addMessage('完了', 'user');
+          addMessage(`文字サイズを${Storage.get('fontSize')}pxに設定しました。`, 'bot');
+          const nextStep = currentStep + 1;
+          if (nextStep < SUGGESTIONS.length) showSuggestions(nextStep);
+        });
+      } else {
+        btn.addEventListener('click', () => {
+          if (item.size !== undefined) {
+            Theme.setFontSize(item.size);
+          } else {
+            Theme.adjustFontSize(item.delta);
+          }
+          addMessage(`${item.label} → ${Storage.get('fontSize')}px`, 'user');
+          showFontSizePicker();
+        });
+      }
       suggestionsEl.appendChild(btn);
     }
   }

@@ -15,7 +15,7 @@
 }
 
 /* Hide images */
-[data-theme="lite"] .article-img {
+[data-theme="lite"] .article-img-wrap {
   display: none !important;
 }
 
