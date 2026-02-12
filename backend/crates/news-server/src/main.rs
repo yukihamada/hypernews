@@ -158,6 +158,7 @@ async fn main() {
         .route("/api/tts/to-reading", post(routes::handle_to_reading))
         .route("/api/tts/voices", get(routes::handle_tts_voices))
         .route("/api/tts", post(routes::handle_tts))
+        .route("/api/tts/clone", post(routes::handle_tts_clone))
         .route("/api/podcast/generate", post(routes::handle_podcast_generate))
         .route("/api/feed", get(routes::get_feed))
         .route("/api/admin/feeds", get(routes::list_feeds))

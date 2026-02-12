@@ -43,7 +43,10 @@ const Tts = (() => {
 
       // Auto-set default voice if none selected
       if (data.default_voice_id && getStyle() === 'off') {
-        setStyle(`el:${data.default_voice_id}`);
+        // If voice_id already has a provider prefix, use as-is; otherwise wrap with el:
+        const vid = data.default_voice_id;
+        const hasPrefix = vid.includes(':');
+        setStyle(hasPrefix ? vid : `el:${vid}`);
       }
     } catch {
       elAvailable = false;
@@ -53,16 +56,18 @@ const Tts = (() => {
 
   function getVoices() {
     const all = [];
-    // ElevenLabs voices (server already sorts: cloned → recommended → other)
     for (const v of elVoices) {
       let label = v.name;
       if (v.category === 'cloned') label += ' (My Voice)';
       else if (v.recommended) label = '\u2605 ' + label;
+      // voice_id already has provider prefix for non-ElevenLabs voices
+      const vid = v.voice_id;
+      const hasPrefix = vid.includes(':');
       all.push({
-        id: `el:${v.voice_id}`,
+        id: hasPrefix ? vid : `el:${vid}`,
         label,
-        type: 'elevenlabs',
-        voice_id: v.voice_id,
+        type: v.category || 'elevenlabs',
+        voice_id: vid,
         category: v.category,
         preview_url: v.preview_url,
         recommended: v.recommended || false,

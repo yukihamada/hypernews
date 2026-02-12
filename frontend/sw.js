@@ -3,7 +3,7 @@
  * v16: Expanded cache, offline improvements, settings/about pages cached
  */
 
-const CACHE_NAME = 'hypernews-v28';
+const CACHE_NAME = 'hypernews-v29';
 const API_CACHE = 'hypernews-api-v1';
 const IMG_CACHE = 'hypernews-img-v1';
 const TTS_CACHE = 'hypernews-tts-v1';

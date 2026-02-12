@@ -1159,6 +1159,17 @@ pub struct TtsRequest {
     pub voice_id: String,
 }
 
+#[derive(Deserialize)]
+pub struct TtsCloneRequest {
+    pub text: String,
+    pub ref_audio: String,      // base64-encoded audio
+    pub ref_text: String,       // transcript of reference audio
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String { "Japanese".to_string() }
+
 #[derive(Serialize)]
 struct VoiceInfo {
     voice_id: String,
@@ -1445,9 +1456,11 @@ pub async fn handle_tts_voices(State(state): State<Arc<AppState>>) -> Response {
         rank(a).cmp(&rank(b)).then_with(|| a.name.cmp(&b.name))
     });
 
+    // Prefer qwen-tts:Japanese as default, then any recommended
     let default_voice_id = voices
         .iter()
-        .find(|v| v.recommended)
+        .find(|v| v.voice_id == "qwen-tts:Japanese")
+        .or_else(|| voices.iter().find(|v| v.recommended))
         .map(|v| v.voice_id.clone());
 
     (
@@ -1550,6 +1563,61 @@ pub async fn handle_tts(
 
     increment_if_free(&state.db, &tier, "tts");
     audio_response(audio_bytes)
+}
+
+pub async fn handle_tts_clone(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<TtsCloneRequest>,
+) -> Response {
+    let tier = extract_user_tier(&headers, &state.db);
+    if let Err(resp) = check_rate_limit(&state.db, &tier, "tts") {
+        return resp;
+    }
+
+    if state.qwen_tts_endpoint_id.is_empty() || state.runpod_api_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Voice clone is not configured"})),
+        ).into_response();
+    }
+
+    let text = if body.text.len() > 5000 { &body.text[..5000] } else { &body.text };
+
+    let input = serde_json::json!({
+        "text": text,
+        "language": body.language,
+        "ref_audio": body.ref_audio,
+        "ref_text": body.ref_text,
+    });
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(120),
+        runpod_runsync(&state, &state.qwen_tts_endpoint_id, input),
+    ).await;
+
+    match result {
+        Ok(Ok(output)) => {
+            match decode_runpod_audio(&output) {
+                Ok(bytes) => {
+                    increment_if_free(&state.db, &tier, "tts");
+                    audio_response(bytes)
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e})),
+                ).into_response(),
+            }
+        }
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Voice clone failed: {e}")})),
+        ).into_response(),
+        Err(_) => (
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(serde_json::json!({"error": "Voice clone timed out"})),
+        ).into_response(),
+    }
 }
 
 /// Try failover providers with 5s timeout each. Returns Ok(bytes) or error Response.
