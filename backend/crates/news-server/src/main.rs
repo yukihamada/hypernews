@@ -4,6 +4,7 @@ mod fetcher;
 mod mcp;
 mod routes;
 mod stripe;
+mod tts_cache;
 
 use axum::body::Body;
 use axum::extract::Request;
@@ -93,7 +94,7 @@ async fn main() {
         .expect("Failed to build HTTP client");
 
     let runpod_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(200))
         .build()
         .expect("Failed to build RunPod HTTP client");
 
@@ -103,6 +104,8 @@ async fn main() {
     tokio::spawn(async move {
         fetcher::run(fetcher_db, fetcher_client).await;
     });
+
+    // NOTE: TTS pre-cache task is spawned after state construction (see below)
 
     let state = Arc::new(AppState {
         db,
@@ -126,6 +129,9 @@ async fn main() {
         base_url,
         google_client_id,
     });
+
+    // Spawn TTS pre-cache background task
+    tokio::spawn(tts_cache::run(Arc::clone(&state)));
 
     let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
     let api_routes = Router::new()

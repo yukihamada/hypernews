@@ -887,6 +887,30 @@ impl Db {
         Ok(changes)
     }
 
+    // --- Top Articles per Category (for TTS pre-cache) ---
+
+    pub fn top_articles_per_category(&self, per_category: i64) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM (
+                     SELECT *, ROW_NUMBER() OVER (PARTITION BY category ORDER BY published_at DESC) AS rn
+                     FROM articles
+                     WHERE category != 'podcast'
+                 )
+                 WHERE rn <= ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let articles = stmt
+            .query_map(params![per_category], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(articles)
+    }
+
     // --- AI Cache ---
 
     pub fn get_cache(&self, cache_key: &str) -> Result<Option<String>, String> {

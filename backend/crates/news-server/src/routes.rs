@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
-fn cache_key(endpoint: &str, body: &str) -> String {
+pub(crate) fn cache_key(endpoint: &str, body: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(endpoint.as_bytes());
     hasher.update(b":");
@@ -544,11 +544,12 @@ pub async fn handle_summarize(
         Ok(summary) => {
             increment_usage_if_needed(&state.db, &tier, "summarize");
 
-            // Convert to reading for TTS
+            // Convert to reading for TTS (generic — caller doesn't know target engine)
             let reading = claude::convert_to_reading(
                 &state.http_client,
                 &state.api_key,
                 &summary,
+                "generic",
             )
             .await
             .unwrap_or_else(|_| summary.clone());
@@ -606,7 +607,7 @@ pub async fn handle_to_reading(
         &body.text
     };
 
-    match claude::convert_to_reading(&state.http_client, &state.api_key, text).await {
+    match claude::convert_to_reading(&state.http_client, &state.api_key, text, "generic").await {
         Ok(reading) => {
             increment_usage_if_needed(&state.db, &tier, "to_reading");
             (
@@ -1622,18 +1623,13 @@ pub async fn handle_tts(
     headers: HeaderMap,
     Json(body): Json<TtsRequest>,
 ) -> Response {
-    let tier = extract_user_tier(&headers, &state.db);
-    if let Err(resp) = check_rate_limit(&state.db, &tier, "tts") {
-        return resp;
-    }
-
     let raw_text = if body.text.len() > 5000 {
         &body.text[..5000]
     } else {
         &body.text
     };
 
-    // --- Audio cache check (voice_id + raw_text) ---
+    // --- Audio cache check BEFORE rate limit (cached audio is free) ---
     let audio_ckey = cache_key("tts_audio", &format!("{}|{}", body.voice_id, raw_text));
     if let Ok(Some(cached_b64)) = state.db.get_cache(&audio_ckey) {
         if let Ok(bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &cached_b64) {
@@ -1641,12 +1637,22 @@ pub async fn handle_tts(
         }
     }
 
+    // Rate limit only applies to uncached (new generation) requests
+    let tier = extract_user_tier(&headers, &state.db);
+    if let Err(resp) = check_rate_limit(&state.db, &tier, "tts") {
+        return resp;
+    }
+
     // --- Cached to-reading conversion (TTL 24h) ---
-    let reading_ckey = cache_key("to_reading", raw_text);
+    let engine = if body.voice_id.starts_with("qwen-tts:") { "qwen-tts" }
+        else if body.voice_id.starts_with("qwen-omni:") { "qwen-omni" }
+        else if body.voice_id.starts_with("cosyvoice:") { "cosyvoice" }
+        else { "elevenlabs" };
+    let reading_ckey = cache_key("to_reading", &format!("{}|{}", engine, raw_text));
     let text = if let Ok(Some(cached_reading)) = state.db.get_cache(&reading_ckey) {
         cached_reading
     } else if !state.api_key.is_empty() {
-        match claude::convert_to_reading(&state.http_client, &state.api_key, raw_text).await {
+        match claude::convert_to_reading(&state.http_client, &state.api_key, raw_text, engine).await {
             Ok(reading) => {
                 let _ = state.db.set_cache(&reading_ckey, "to_reading", &reading, 86400);
                 reading
@@ -1826,7 +1832,7 @@ fn tts_fallback_chain(state: &AppState, current_voice_id: &str) -> Vec<(&'static
 }
 
 /// Core TTS generation — returns audio bytes or error string. No HTTP response logic.
-async fn tts_generate(state: &AppState, voice_id: &str, text: &str) -> Result<axum::body::Bytes, String> {
+pub(crate) async fn tts_generate(state: &AppState, voice_id: &str, text: &str) -> Result<axum::body::Bytes, String> {
     if let Some(voice_name) = voice_id.strip_prefix("openai:") {
         return tts_openai(state, text, voice_name).await;
     }
@@ -2065,8 +2071,36 @@ async fn runpod_runsync(
         .map_err(|e| format!("RunPod parse: {e}"))?;
 
     match result["status"].as_str() {
-        Some("COMPLETED") => Ok(result["output"].clone()),
-        Some("FAILED") => Err(format!("RunPod job failed: {}", result["error"].as_str().unwrap_or("unknown"))),
+        Some("COMPLETED") => return Ok(result["output"].clone()),
+        Some("FAILED") => return Err(format!("RunPod job failed: {}", result["error"].as_str().unwrap_or("unknown"))),
+        Some("IN_QUEUE") | Some("IN_PROGRESS") => {
+            // Cold start — fall back to polling
+            let job_id = match result["id"].as_str() {
+                Some(id) => id.to_string(),
+                None => return Err("RunPod: IN_QUEUE but no job id".into()),
+            };
+            let status_url = format!("https://api.runpod.ai/v2/{}/status/{}", endpoint_id, job_id);
+            for _ in 0..90 {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                let poll_resp = state
+                    .runpod_client
+                    .get(&status_url)
+                    .header("Authorization", format!("Bearer {}", state.runpod_api_key))
+                    .send()
+                    .await
+                    .map_err(|e| format!("RunPod poll: {e}"))?;
+                let poll_result: serde_json::Value = poll_resp.json().await
+                    .map_err(|e| format!("RunPod poll parse: {e}"))?;
+                match poll_result["status"].as_str() {
+                    Some("COMPLETED") => return Ok(poll_result["output"].clone()),
+                    Some("FAILED") => return Err(format!("RunPod job failed: {}", poll_result["error"].as_str().unwrap_or("unknown"))),
+                    Some("IN_QUEUE") | Some("IN_PROGRESS") => continue,
+                    Some(s) => return Err(format!("RunPod unexpected status: {s}")),
+                    None => return Err("RunPod: no status in poll response".into()),
+                }
+            }
+            Err("RunPod: polling timed out".into())
+        }
         Some(status) => Err(format!("RunPod unexpected status: {status}")),
         None => Err(format!("RunPod: no status in response: {result}")),
     }
