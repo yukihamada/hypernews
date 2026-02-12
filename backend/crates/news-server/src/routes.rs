@@ -113,12 +113,12 @@ struct FeatureLimit {
 }
 
 const FEATURE_LIMITS: &[FeatureLimit] = &[
-    FeatureLimit { name: "summarize", daily_limit: 1 },
-    FeatureLimit { name: "questions", daily_limit: 5 },
-    FeatureLimit { name: "ask", daily_limit: 5 },
-    FeatureLimit { name: "tts", daily_limit: 3 },
-    FeatureLimit { name: "to_reading", daily_limit: 5 },
-    FeatureLimit { name: "podcast", daily_limit: 3 },
+    FeatureLimit { name: "summarize", daily_limit: 20 },
+    FeatureLimit { name: "questions", daily_limit: 20 },
+    FeatureLimit { name: "ask", daily_limit: 20 },
+    FeatureLimit { name: "tts", daily_limit: 30 },
+    FeatureLimit { name: "to_reading", daily_limit: 30 },
+    FeatureLimit { name: "podcast", daily_limit: 10 },
 ];
 
 fn get_daily_limit(feature: &str) -> i64 {
@@ -144,7 +144,7 @@ fn check_rate_limit(
                     StatusCode::PAYMENT_REQUIRED,
                     Json(serde_json::json!({
                         "error": "rate_limit_exceeded",
-                        "message": format!("本日の{}回数上限（{}回）に達しました。Proプランにアップグレードすると無制限でご利用いただけます。", feature, limit),
+                        "message": format!("本日の利用回数（{}回）に達しました。明日リセットされます。", limit),
                         "feature": feature,
                         "limit": limit,
                         "used": used,
