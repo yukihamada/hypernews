@@ -137,6 +137,384 @@ url = "https://www3.nhk.or.jp/rss/news/cat4.xml"
 source = "NHK 政治"
 category = "general"
 
+# --- General: Regional Newspapers ---
+[[feeds]]
+url = "https://www.tokyo-np.co.jp/rss"
+source = "東京新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.hokkaido-np.co.jp/rss/"
+source = "北海道新聞"
+category = "general"
+
+[[feeds]]
+url = "https://kahoku.news/rss/index.xml"
+source = "河北新報"
+category = "general"
+
+[[feeds]]
+url = "https://www.niigata-nippo.co.jp/feed/"
+source = "新潟日報"
+category = "general"
+
+[[feeds]]
+url = "https://www.shinmai.co.jp/feed/"
+source = "信濃毎日新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.at-s.com/rss/"
+source = "静岡新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.chunichi.co.jp/rss/national.xml"
+source = "中日新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.kyoto-np.co.jp/feed/"
+source = "京都新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.kobe-np.co.jp/rss/"
+source = "神戸新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.sanyonews.jp/rss/"
+source = "山陽新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.chugoku-np.co.jp/feed/"
+source = "中国新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.nishinippon.co.jp/feed/"
+source = "西日本新聞"
+category = "general"
+
+[[feeds]]
+url = "https://373news.com/rss/"
+source = "南日本新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.okinawatimes.co.jp/feed/"
+source = "沖縄タイムス"
+category = "general"
+
+[[feeds]]
+url = "https://ryukyushimpo.jp/rss/"
+source = "琉球新報"
+category = "general"
+
+[[feeds]]
+url = "https://www.saga-s.co.jp/rss/"
+source = "佐賀新聞"
+category = "general"
+
+[[feeds]]
+url = "https://kumanichi.com/rss/"
+source = "熊本日日新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.nagasaki-np.co.jp/rss/"
+source = "長崎新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.oita-press.co.jp/rss/"
+source = "大分合同新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.the-miyanichi.co.jp/rss/"
+source = "宮崎日日新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.iwate-np.co.jp/rss/"
+source = "岩手日報"
+category = "general"
+
+[[feeds]]
+url = "https://www.sakigake.jp/rss/"
+source = "秋田魁新報"
+category = "general"
+
+[[feeds]]
+url = "https://www.yamagata-np.jp/rss/"
+source = "山形新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.minyu-net.com/rss/"
+source = "福島民友"
+category = "general"
+
+[[feeds]]
+url = "https://www.fukuishimbun.co.jp/rss/"
+source = "福井新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.hokkoku.co.jp/rss/"
+source = "北國新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.gifu-np.co.jp/rss/"
+source = "岐阜新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.topics.or.jp/rss/"
+source = "徳島新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.ehime-np.co.jp/rss/"
+source = "愛媛新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.kochinews.co.jp/rss/"
+source = "高知新聞"
+category = "general"
+
+# --- General: TV Stations ---
+[[feeds]]
+url = "https://newsdig.tbs.co.jp/rss/all.xml"
+source = "TBS NEWS DIG"
+category = "general"
+
+[[feeds]]
+url = "https://news.tv-asahi.co.jp/feed/"
+source = "テレ朝news"
+category = "general"
+
+[[feeds]]
+url = "https://www.fnn.jp/rss/"
+source = "FNNプライムオンライン"
+category = "general"
+
+[[feeds]]
+url = "https://news.ntv.co.jp/rss"
+source = "日テレNEWS"
+category = "general"
+
+[[feeds]]
+url = "https://txbiz.tv-tokyo.co.jp/rss/"
+source = "テレ東BIZ"
+category = "general"
+
+# --- General: Web Media ---
+[[feeds]]
+url = "https://bunshun.jp/list/feed/rss"
+source = "文春オンライン"
+category = "general"
+
+[[feeds]]
+url = "https://president.jp/rss/"
+source = "PRESIDENT Online"
+category = "general"
+
+[[feeds]]
+url = "https://gendai.media/list/feed/rss"
+source = "現代ビジネス"
+category = "general"
+
+[[feeds]]
+url = "https://jbpress.ismedia.jp/feed/"
+source = "JBpress"
+category = "general"
+
+[[feeds]]
+url = "https://courrier.jp/feed/"
+source = "COURRIER Japon"
+category = "general"
+
+[[feeds]]
+url = "https://dot.asahi.com/rss/"
+source = "AERA dot."
+category = "general"
+
+[[feeds]]
+url = "https://www.dailyshincho.jp/feed/"
+source = "デイリー新潮"
+category = "general"
+
+[[feeds]]
+url = "https://www.news-postseven.com/feed/"
+source = "NEWSポストセブン"
+category = "general"
+
+[[feeds]]
+url = "https://www.nikkan-gendai.com/rss/"
+source = "日刊ゲンダイDIGITAL"
+category = "general"
+
+[[feeds]]
+url = "https://www.huffingtonpost.jp/feed/"
+source = "ハフポスト日本版"
+category = "general"
+
+[[feeds]]
+url = "https://times.abema.tv/rss"
+source = "ABEMA TIMES"
+category = "general"
+
+[[feeds]]
+url = "https://www.bengo4.com/rss/"
+source = "弁護士ドットコム"
+category = "general"
+
+[[feeds]]
+url = "https://weathernews.jp/rss/"
+source = "ウェザーニュース"
+category = "general"
+
+[[feeds]]
+url = "https://www.japantimes.co.jp/feed/"
+source = "Japan Times"
+category = "general"
+
+[[feeds]]
+url = "https://rss.cbc.ca/lineup/topstories.xml"
+source = "CBC News"
+category = "general"
+
+[[feeds]]
+url = "https://feeds.npr.org/1001/rss.xml"
+source = "NPR News"
+category = "general"
+
+[[feeds]]
+url = "https://www.nnn.co.jp/rss/"
+source = "日本海新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.toonippo.co.jp/rss/"
+source = "東奥日報"
+category = "general"
+
+[[feeds]]
+url = "https://www.tomamin.co.jp/feed/"
+source = "苫小牧民報"
+category = "general"
+
+[[feeds]]
+url = "https://www.shimotsuke.co.jp/rss/"
+source = "下野新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.saitama-np.co.jp/rss/"
+source = "埼玉新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.kanaloco.jp/rss/"
+source = "神奈川新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.nara-np.co.jp/rss/"
+source = "奈良新聞"
+category = "general"
+
+[[feeds]]
+url = "https://www.agara.co.jp/rss/"
+source = "紀伊民報"
+category = "general"
+
+[[feeds]]
+url = "https://smart-flash.jp/feed/"
+source = "Smart FLASH"
+category = "general"
+
+[[feeds]]
+url = "https://news.livedoor.com/rss/article/vender/main.xml"
+source = "livedoor NEWS"
+category = "general"
+
+[[feeds]]
+url = "https://www.j-cast.com/rss/all.xml"
+source = "J-CASTニュース"
+category = "general"
+
+[[feeds]]
+url = "https://www.iza.ne.jp/feed/"
+source = "iza"
+category = "general"
+
+[[feeds]]
+url = "https://www.zakzak.co.jp/rss/lifenews.xml"
+source = "zakzak"
+category = "general"
+
+[[feeds]]
+url = "https://www.excite.co.jp/rss/news/odd/"
+source = "Exciteニュース"
+category = "general"
+
+[[feeds]]
+url = "https://this.kiji.is/rss/news?c=39546741174616069"
+source = "47NEWS 速報"
+category = "general"
+
+[[feeds]]
+url = "https://www.recordchina.co.jp/feed/"
+source = "Record China"
+category = "general"
+
+[[feeds]]
+url = "https://www.afpbb.com/rss/afpbb/top.rdf"
+source = "AFPBB News"
+category = "general"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat2.xml"
+source = "NHK 国際"
+category = "general"
+
+[[feeds]]
+url = "https://japan.hani.co.kr/arti/rss/"
+source = "ハンギョレ日本語版"
+category = "general"
+
+[[feeds]]
+url = "https://japanese.joins.com/rss"
+source = "中央日報日本語版"
+category = "general"
+
+[[feeds]]
+url = "https://www.chosunonline.com/site/data/rss/rss.xml"
+source = "朝鮮日報日本語版"
+category = "general"
+
+[[feeds]]
+url = "https://www.epochtimes.jp/feed"
+source = "大紀元"
+category = "general"
+
+[[feeds]]
+url = "https://www.cnn.co.jp/feed/"
+source = "CNN.co.jp"
+category = "general"
+
+[[feeds]]
+url = "https://www.bbc.com/japanese/feed"
+source = "BBC日本語"
+category = "general"
+
 # --- Tech ---
 [[feeds]]
 url = "https://hnrss.org/frontpage"
@@ -288,6 +666,194 @@ url = "https://techable.jp/feed"
 source = "Techable"
 category = "tech"
 
+# --- Tech: Impress Watch Family ---
+[[feeds]]
+url = "https://internet.watch.impress.co.jp/data/rss/1.0/iw/feed.rdf"
+source = "Internet Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://k-tai.watch.impress.co.jp/data/rss/1.0/ktw/feed.rdf"
+source = "ケータイ Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://av.watch.impress.co.jp/data/rss/1.0/avw/feed.rdf"
+source = "AV Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://game.watch.impress.co.jp/data/rss/1.0/gmw/feed.rdf"
+source = "GAME Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://car.watch.impress.co.jp/data/rss/1.0/caw/feed.rdf"
+source = "Car Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://kaden.watch.impress.co.jp/data/rss/1.0/kdw/feed.rdf"
+source = "家電 Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://dc.watch.impress.co.jp/data/rss/1.0/dcw/feed.rdf"
+source = "デジカメ Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://cloud.watch.impress.co.jp/data/rss/1.0/cw/feed.rdf"
+source = "クラウド Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://forest.watch.impress.co.jp/data/rss/1.0/wf/feed.rdf"
+source = "窓の杜"
+category = "tech"
+
+# --- Tech: Japanese IT Media ---
+[[feeds]]
+url = "https://japan.cnet.com/rss/index.rdf"
+source = "CNET Japan"
+category = "tech"
+
+[[feeds]]
+url = "https://japan.zdnet.com/rss/index.rdf"
+source = "ZDNet Japan"
+category = "tech"
+
+[[feeds]]
+url = "https://rss.itmedia.co.jp/rss/2.0/ait.xml"
+source = "@IT"
+category = "tech"
+
+[[feeds]]
+url = "https://news.mynavi.jp/rss/index"
+source = "マイナビニュース"
+category = "tech"
+
+[[feeds]]
+url = "https://codezine.jp/rss/new/20/index.xml"
+source = "CodeZine"
+category = "tech"
+
+[[feeds]]
+url = "https://atmarkit.itmedia.co.jp/rss/2.0/ait_eai.xml"
+source = "@IT Smart & Social"
+category = "tech"
+
+[[feeds]]
+url = "https://www.itmedia.co.jp/pcuser/rss/2.0/pcuser.xml"
+source = "ITmedia PC USER"
+category = "tech"
+
+[[feeds]]
+url = "https://www.itmedia.co.jp/mobile/rss/2.0/mobile.xml"
+source = "ITmedia Mobile"
+category = "tech"
+
+# --- Tech: International ---
+[[feeds]]
+url = "https://www.engadget.com/rss.xml"
+source = "Engadget"
+category = "tech"
+
+[[feeds]]
+url = "https://www.cnet.com/rss/news/"
+source = "CNET"
+category = "tech"
+
+[[feeds]]
+url = "https://www.tomshardware.com/feeds/all"
+source = "Tom's Hardware"
+category = "tech"
+
+[[feeds]]
+url = "https://venturebeat.com/feed/"
+source = "VentureBeat"
+category = "tech"
+
+[[feeds]]
+url = "https://www.zdnet.com/news/rss.xml"
+source = "ZDNet"
+category = "tech"
+
+[[feeds]]
+url = "https://www.bleepingcomputer.com/feed/"
+source = "BleepingComputer"
+category = "tech"
+
+[[feeds]]
+url = "https://krebsonsecurity.com/feed/"
+source = "Krebs on Security"
+category = "tech"
+
+[[feeds]]
+url = "https://www.schneier.com/feed/"
+source = "Schneier on Security"
+category = "tech"
+
+[[feeds]]
+url = "https://simonwillison.net/atom/everything/"
+source = "Simon Willison"
+category = "tech"
+
+[[feeds]]
+url = "https://huggingface.co/blog/feed.xml"
+source = "Hugging Face Blog"
+category = "tech"
+
+[[feeds]]
+url = "https://www.deepmind.com/blog/rss.xml"
+source = "DeepMind Blog"
+category = "tech"
+
+[[feeds]]
+url = "https://ai.googleblog.com/feeds/posts/default"
+source = "Google AI Blog"
+category = "tech"
+
+[[feeds]]
+url = "https://thinkit.co.jp/feed"
+source = "Think IT"
+category = "tech"
+
+[[feeds]]
+url = "https://www.lifehacker.jp/feed/index.xml"
+source = "Lifehacker Japan"
+category = "tech"
+
+[[feeds]]
+url = "https://www.appbank.net/feed"
+source = "AppBank"
+category = "tech"
+
+[[feeds]]
+url = "https://weekly.ascii.jp/rss/index.xml"
+source = "週刊アスキー"
+category = "tech"
+
+[[feeds]]
+url = "https://www.moguravr.com/feed/"
+source = "Mogura VR"
+category = "tech"
+
+[[feeds]]
+url = "https://robotstart.info/feed"
+source = "ロボスタ"
+category = "tech"
+
+[[feeds]]
+url = "https://ledge.ai/feed"
+source = "Ledge.ai"
+category = "tech"
+
+[[feeds]]
+url = "https://ainow.ai/feed/"
+source = "AINOW"
+category = "tech"
+
 # --- Business ---
 [[feeds]]
 url = "https://www3.nhk.or.jp/rss/news/cat5.xml"
@@ -384,6 +950,113 @@ url = "https://decrypt.co/feed"
 source = "Decrypt"
 category = "business"
 
+# --- Business: Japanese ---
+[[feeds]]
+url = "https://business.nikkei.com/rss/sns/nb.rdf"
+source = "日経ビジネス"
+category = "business"
+
+[[feeds]]
+url = "https://www.businessinsider.jp/feed/index.xml"
+source = "Business Insider Japan"
+category = "business"
+
+[[feeds]]
+url = "https://forbesjapan.com/feed"
+source = "Forbes Japan"
+category = "business"
+
+[[feeds]]
+url = "https://zuuonline.com/feed"
+source = "ZUU online"
+category = "business"
+
+[[feeds]]
+url = "https://maonline.jp/rss/"
+source = "M&A Online"
+category = "business"
+
+[[feeds]]
+url = "https://newspicks.com/news/feed"
+source = "NewsPicks"
+category = "business"
+
+[[feeds]]
+url = "https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf"
+source = "Impress Watch"
+category = "business"
+
+[[feeds]]
+url = "https://signal.diamond.jp/feed"
+source = "ダイヤモンド・シグナル"
+category = "business"
+
+[[feeds]]
+url = "https://www.itmedia.co.jp/enterprise/rss/2.0/enterprise.xml"
+source = "ITmedia エンタープライズ"
+category = "business"
+
+# --- Business: International ---
+[[feeds]]
+url = "https://www.businessinsider.com/rss"
+source = "Business Insider"
+category = "business"
+
+[[feeds]]
+url = "https://qz.com/feed/"
+source = "Quartz"
+category = "business"
+
+[[feeds]]
+url = "https://www.inc.com/rss"
+source = "Inc."
+category = "business"
+
+[[feeds]]
+url = "https://www.fastcompany.com/latest/rss"
+source = "Fast Company"
+category = "business"
+
+[[feeds]]
+url = "https://fortune.com/feed/"
+source = "Fortune"
+category = "business"
+
+[[feeds]]
+url = "https://www.barrons.com/feed"
+source = "Barron's"
+category = "business"
+
+[[feeds]]
+url = "https://theblock.co/rss.xml"
+source = "The Block"
+category = "business"
+
+[[feeds]]
+url = "https://www.defiant.news/feed"
+source = "The Defiant"
+category = "business"
+
+[[feeds]]
+url = "https://bitcoinmagazine.com/.rss/full/"
+source = "Bitcoin Magazine"
+category = "business"
+
+[[feeds]]
+url = "https://prtimes.jp/index.rdf"
+source = "PR TIMES"
+category = "business"
+
+[[feeds]]
+url = "https://www.projectdesign.jp/feed"
+source = "事業構想"
+category = "business"
+
+[[feeds]]
+url = "https://r25.jp/feed"
+source = "新R25"
+category = "business"
+
 # --- Entertainment ---
 [[feeds]]
 url = "https://www3.nhk.or.jp/rss/news/cat6.xml"
@@ -475,6 +1148,108 @@ url = "https://www.gamespark.jp/feed/index.xml"
 source = "Game*Spark"
 category = "entertainment"
 
+# --- Entertainment: Japanese ---
+[[feeds]]
+url = "https://natalie.mu/music/feed/news"
+source = "音楽ナタリー"
+category = "entertainment"
+
+[[feeds]]
+url = "https://natalie.mu/owarai/feed/news"
+source = "お笑いナタリー"
+category = "entertainment"
+
+[[feeds]]
+url = "https://natalie.mu/comic/feed/news"
+source = "コミックナタリー"
+category = "entertainment"
+
+[[feeds]]
+url = "https://natalie.mu/stage/feed/news"
+source = "ステージナタリー"
+category = "entertainment"
+
+[[feeds]]
+url = "https://eiga.com/feed/"
+source = "映画.com"
+category = "entertainment"
+
+[[feeds]]
+url = "https://rss.itmedia.co.jp/rss/2.0/netlab.xml"
+source = "ねとらぼ"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.animatetimes.com/rss/"
+source = "アニメイトタイムズ"
+category = "entertainment"
+
+[[feeds]]
+url = "https://mantan-web.jp/rss"
+source = "MANTANWEB"
+category = "entertainment"
+
+[[feeds]]
+url = "https://realsound.jp/feed"
+source = "Real Sound"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.inside-games.jp/rss/index.rdf"
+source = "インサイド"
+category = "entertainment"
+
+[[feeds]]
+url = "https://mdpr.jp/rss/"
+source = "モデルプレス"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.barks.jp/rss/"
+source = "BARKS"
+category = "entertainment"
+
+[[feeds]]
+url = "https://dengekionline.com/feed/"
+source = "電撃オンライン"
+category = "entertainment"
+
+[[feeds]]
+url = "https://nlab.itmedia.co.jp/rss/2.0/nl_all.xml"
+source = "ねとらぼ エンタ"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.comic-earthstar.jp/feed/"
+source = "コミックアース・スター"
+category = "entertainment"
+
+# --- Entertainment: International ---
+[[feeds]]
+url = "https://www.ew.com/feed/"
+source = "Entertainment Weekly"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.vulture.com/feed/rss/index.xml"
+source = "Vulture"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.crunchyroll.com/feed"
+source = "Crunchyroll News"
+category = "entertainment"
+
+[[feeds]]
+url = "https://kotaku.com/rss"
+source = "Kotaku"
+category = "entertainment"
+
+[[feeds]]
+url = "https://screenrant.com/feed/"
+source = "Screen Rant"
+category = "entertainment"
+
 # --- Sports ---
 [[feeds]]
 url = "https://www3.nhk.or.jp/rss/news/cat7.xml"
@@ -549,6 +1324,93 @@ category = "sports"
 [[feeds]]
 url = "https://www.athlecikanet.com/feed"
 source = "陸上ch"
+category = "sports"
+
+# --- Sports: Japanese ---
+[[feeds]]
+url = "https://full-count.jp/feed/"
+source = "Full-Count"
+category = "sports"
+
+[[feeds]]
+url = "https://baseballking.jp/feed/"
+source = "BASEBALL KING"
+category = "sports"
+
+[[feeds]]
+url = "https://www.soccer-king.jp/feed/"
+source = "サッカーキング"
+category = "sports"
+
+[[feeds]]
+url = "https://basketballking.jp/feed/"
+source = "バスケットボールキング"
+category = "sports"
+
+[[feeds]]
+url = "https://the-ans.jp/feed/"
+source = "THE ANSWER"
+category = "sports"
+
+[[feeds]]
+url = "https://hochi.news/rss/"
+source = "スポーツ報知"
+category = "sports"
+
+[[feeds]]
+url = "https://www.daily.co.jp/rss/"
+source = "デイリースポーツ"
+category = "sports"
+
+[[feeds]]
+url = "https://www.sanspo.com/rss/"
+source = "サンスポ"
+category = "sports"
+
+[[feeds]]
+url = "https://f1-gate.com/feed/"
+source = "F1-Gate"
+category = "sports"
+
+[[feeds]]
+url = "https://www.nikkansports.com/soccer/world/rss/soccer_world.rdf"
+source = "日刊スポーツ海外サッカー"
+category = "sports"
+
+[[feeds]]
+url = "https://www.nikkansports.com/baseball/npb/rss/baseball_npb.rdf"
+source = "日刊スポーツ NPB"
+category = "sports"
+
+[[feeds]]
+url = "https://www.nikkansports.com/general/rss/general.rdf"
+source = "日刊スポーツ 一般"
+category = "sports"
+
+[[feeds]]
+url = "https://rallyjapan.jp/feed/"
+source = "Rally Japan"
+category = "sports"
+
+# --- Sports: International ---
+[[feeds]]
+url = "https://www.cyclingnews.com/rss/"
+source = "CyclingNews"
+category = "sports"
+
+[[feeds]]
+url = "https://www.rugbyworld.com/feed"
+source = "Rugby World"
+category = "sports"
+
+[[feeds]]
+url = "https://www.bbc.co.uk/sport/formula1/rss.xml"
+source = "BBC F1"
+category = "sports"
+
+[[feeds]]
+url = "https://www.marca.com/en/rss/portada.xml"
+source = "Marca"
 category = "sports"
 
 # --- Science ---
@@ -635,6 +1497,88 @@ category = "science"
 [[feeds]]
 url = "https://nazology.net/feed"
 source = "ナゾロジー"
+category = "science"
+
+# --- Science: Japanese ---
+[[feeds]]
+url = "https://scienceportal.jst.go.jp/rss/"
+source = "サイエンスポータル"
+category = "science"
+
+[[feeds]]
+url = "https://news.mynavi.jp/techplus/rss/index"
+source = "マイナビ テクノロジー"
+category = "science"
+
+[[feeds]]
+url = "https://sorae.info/feed"
+source = "sorae 宇宙へのポータルサイト"
+category = "science"
+
+[[feeds]]
+url = "https://www.mugendai-web.jp/feed"
+source = "Mugendai"
+category = "science"
+
+[[feeds]]
+url = "https://karapaia.com/feed"
+source = "カラパイア"
+category = "science"
+
+[[feeds]]
+url = "https://gigazine.net/news/rss_atom/"
+source = "GIGAZINE Science"
+category = "science"
+
+# --- Science: International ---
+[[feeds]]
+url = "https://rss.sciam.com/ScientificAmerican-Global"
+source = "Scientific American"
+category = "science"
+
+[[feeds]]
+url = "https://www.popsci.com/feed/"
+source = "Popular Science"
+category = "science"
+
+[[feeds]]
+url = "https://feeds.arstechnica.com/arstechnica/science"
+source = "Ars Technica Science"
+category = "science"
+
+[[feeds]]
+url = "https://www.iflscience.com/rss"
+source = "IFLScience"
+category = "science"
+
+[[feeds]]
+url = "https://www.sciencealert.com/feed"
+source = "ScienceAlert"
+category = "science"
+
+[[feeds]]
+url = "https://rss.arxiv.org/rss/cs.CL"
+source = "arXiv CS.CL"
+category = "science"
+
+[[feeds]]
+url = "https://rss.arxiv.org/rss/cs.LG"
+source = "arXiv CS.LG"
+category = "science"
+
+[[feeds]]
+url = "https://rss.arxiv.org/rss/cs.CV"
+source = "arXiv CS.CV"
+category = "science"
+
+[[feeds]]
+url = "https://www.cell.com/cell/current.rss"
+source = "Cell"
+category = "science"
+
+[[feeds]]
+url = "https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas"
+source = "PNAS"
 category = "science"
 
 # --- Podcast ---
@@ -736,4 +1680,76 @@ category = "podcast"
 [[feeds]]
 url = "https://anchor.fm/s/2f1a21d8/podcast/rss"
 source = "Coder Radio"
+category = "podcast"
+
+# --- Podcast: Japanese ---
+[[feeds]]
+url = "https://anchor.fm/s/24d21d18/podcast/rss"
+source = "コテンラジオ"
+category = "podcast"
+
+[[feeds]]
+url = "https://anchor.fm/s/279cab44/podcast/rss"
+source = "超相対性理論"
+category = "podcast"
+
+[[feeds]]
+url = "https://anchor.fm/s/2f6dff40/podcast/rss"
+source = "あたらしい経済"
+category = "podcast"
+
+[[feeds]]
+url = "https://anchor.fm/s/7698fff8/podcast/rss"
+source = "ゆるコンピュータ科学ラジオ"
+category = "podcast"
+
+[[feeds]]
+url = "https://anchor.fm/s/263f5e18/podcast/rss"
+source = "ゆる学徒ハウス"
+category = "podcast"
+
+[[feeds]]
+url = "https://feeds.soundcloud.com/users/soundcloud:users:301174089/sounds.rss"
+source = "Takram Radio"
+category = "podcast"
+
+[[feeds]]
+url = "https://anchor.fm/s/4c47c478/podcast/rss"
+source = "CULTIBASE Radio"
+category = "podcast"
+
+# --- Podcast: International ---
+[[feeds]]
+url = "https://feeds.megaphone.fm/all-in-with-chamath-jason-sacks-friedberg"
+source = "All-In Podcast"
+category = "podcast"
+
+[[feeds]]
+url = "https://feeds.megaphone.fm/acquired"
+source = "Acquired"
+category = "podcast"
+
+[[feeds]]
+url = "https://feeds.megaphone.fm/hubspot-audio-my-first-million"
+source = "My First Million"
+category = "podcast"
+
+[[feeds]]
+url = "https://api.substack.com/feed/podcast/1084089.rss"
+source = "Latent Space"
+category = "podcast"
+
+[[feeds]]
+url = "https://feeds.transistor.fm/practical-ai-machine-learning-data-science"
+source = "Practical AI"
+category = "podcast"
+
+[[feeds]]
+url = "https://www.spreaker.com/show/5805267/episodes/feed"
+source = "AI Podcast (NVIDIA)"
+category = "podcast"
+
+[[feeds]]
+url = "https://feeds.megaphone.fm/behindthetech"
+source = "Behind the Tech"
 category = "podcast"
