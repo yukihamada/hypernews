@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <script>(function(){var h=location.hostname;var s='xyz';if(h.indexOf('online')!==-1)s='online';else if(h.indexOf('chatnews')!==-1)s='chatnews';else if(h.indexOf('yournews')!==-1)s='yournews';else if(h.indexOf('velo')!==-1)s='velo';else if(h.indexOf('.cloud')!==-1)s='cloud';else if(h.indexOf('claud')!==-1)s='claud';document.documentElement.dataset.site=s;})()</script>
+  <script>(function(){try{var s=JSON.parse(localStorage.getItem('hn_settings')||'{}');if(s.mode)document.documentElement.setAttribute('data-mode',s.mode);if(s.theme)document.documentElement.setAttribute('data-theme',s.theme);if(s.density)document.documentElement.setAttribute('data-density',s.density);}catch(e){}})()</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="/" crossorigin>

@@ -240,6 +240,7 @@ async fn main() {
     let app = api_routes
         .fallback_service(ServeDir::new(&static_dir).append_index_html_on_directories(true))
         .layer(middleware::from_fn(redirect_chatnews_tech))
+        .layer(middleware::from_fn(set_cache_headers))
         .layer(ConcurrencyLimitLayer::new(256))
         .layer(CompressionLayer::new())
         .layer(cors)
@@ -271,6 +272,33 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Server error");
+}
+
+/// Set Cache-Control headers based on URL patterns
+async fn set_cache_headers(req: Request, next: Next) -> impl IntoResponse {
+    let path = req.uri().path().to_owned();
+    let query = req.uri().query().unwrap_or_default().to_owned();
+    let mut res = next.run(req).await;
+    let cache_value = if query.contains("v=") {
+        Some("public, max-age=31536000, immutable")
+    } else if path == "/sw.js" {
+        Some("no-cache")
+    } else if path.ends_with(".html") || path == "/" {
+        Some("no-cache")
+    } else if path.starts_with("/icons/") {
+        Some("public, max-age=604800")
+    } else if path.ends_with(".json") || path == "/robots.txt" || path == "/sitemap.xml" {
+        Some("public, max-age=3600")
+    } else {
+        None
+    };
+    if let Some(val) = cache_value {
+        res.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static(val),
+        );
+    }
+    res
 }
 
 /// Redirect chatnews.tech → chatnews.link (301)

@@ -3081,14 +3081,14 @@ const SITE_METAS: &[SiteMeta] = &[
     SiteMeta {
         _site_id: "online",
         name: "news.online",
-        title: "news.online - Voice News Feed",
-        description: "TikTok-style AI voice news feed. Swipe through the latest news with AI-generated podcast dialogues.",
-        description_long: "Voice News - TikTok-style AI voice news feed. Swipe through the latest news with AI-generated podcast dialogues and voice narration.",
+        title: "news.online - AI Video & Audio News (Coming Soon)",
+        description: "The $56,000 domain. AI-powered video and audio news — like TV, but smarter. Built in Rust. Coming soon.",
+        description_long: "news.online - The $56,000 domain coming to life. AI-powered video and audio news broadcasts with natural voices. Like TV, but smarter. Built entirely in Rust.",
         url: "https://news.online/",
         image: "https://news.online/icons/icon-512.png",
         theme_color: "#000000",
         lang: "en",
-        keywords: "voice news,AI podcast,news feed,TikTok news,audio news,AI narration,news online",
+        keywords: "coming soon,AI news,video news,audio news,56000 dollar domain,news online,Rust,AI broadcast",
     },
     SiteMeta {
         _site_id: "cloud",
