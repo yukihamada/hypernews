@@ -89,7 +89,7 @@
   }
 
   function initBtnGroup(groupId, key, opts) {
-    const val = String(Storage.get(key) ?? (opts && opts.default) || '');
+    const val = String(Storage.get(key) ?? ((opts && opts.default) || ''));
     setActive(groupId, val);
     const el = document.getElementById(groupId);
     if (!el) return;

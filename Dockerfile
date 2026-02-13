@@ -10,7 +10,7 @@ WORKDIR /frontend
 COPY frontend/ .
 RUN npm init -y && npm install esbuild \
  && for f in js/*.js; do npx esbuild "$f" --minify --outfile="$f" --allow-overwrite; done \
- && for f in css/*.css; do npx esbuild "$f" --minify --loader=css --outfile="$f" --allow-overwrite; done \
+ && for f in css/*.css; do npx esbuild "$f" --minify --outfile="$f" --allow-overwrite; done \
  && npx esbuild sw.js --minify --outfile=sw.js --allow-overwrite \
  && rm -rf node_modules package.json package-lock.json
 
