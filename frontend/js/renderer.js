@@ -42,14 +42,31 @@ const Renderer = (() => {
         ? `<span class="group-badge">${typeof t === 'function' ? t('group_badge', { n: article.group_count - 1 }) : '+' + (article.group_count - 1) + ' related'}</span>`
         : '';
 
+    // Image: use proxy to avoid CORS/mixed-content issues
+    const imgUrl = article.image_url
+      ? '/api/image-proxy?url=' + encodeURIComponent(article.image_url)
+      : '';
+    const imgHtml = imgUrl
+      ? `<div class="article-img-wrap" data-category="${escHtml(catLabel)}">
+           <img class="article-img" src="${imgUrl}" alt="" loading="lazy" onerror="this.parentElement.classList.add('img-failed')">
+           <div class="article-img-fallback"><span>${escHtml(article.source)}</span></div>
+         </div>`
+      : `<div class="article-img-wrap" data-category="${escHtml(catLabel)}">
+           <div class="article-img-fallback"><span>${escHtml(article.source)}</span></div>
+         </div>`;
+
+    const ttsLabel = typeof t === 'function' ? t('tts.read_aloud') : 'Read aloud';
+    const bmLabel = typeof t === 'function' ? t('bookmark') : 'Bookmark';
+
     el.innerHTML = `
+      ${imgHtml}
       <div class="article-body">
         <h2 class="article-title"><a href="${escHtml(article.url)}" target="_blank" rel="noopener">${escHtml(article.title)}</a>${groupBadge}</h2>
         <div class="article-meta">
           <span class="article-source">${escHtml(article.source)}</span>
           <time datetime="${article.published_at}">${relativeTime(article.published_at)}</time>
-          <button class="tts-btn" type="button" aria-label="${typeof t === 'function' ? t('tts.read_aloud') : 'Read aloud'}" title="${typeof t === 'function' ? t('tts.read_aloud') : 'Read aloud'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg></button>
-          <button class="bookmark-btn${typeof Bookmarks !== 'undefined' && Bookmarks.isBookmarked(article.id) ? ' bookmarked' : ''}" type="button" aria-label="${typeof t === 'function' ? t('bookmark') : 'Bookmark'}" title="${typeof t === 'function' ? t('bookmark') : 'Bookmark'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>
+          <button class="tts-btn" type="button" aria-label="${ttsLabel}" title="${ttsLabel}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg></button>
+          <button class="bookmark-btn${typeof Bookmarks !== 'undefined' && Bookmarks.isBookmarked(article.id) ? ' bookmarked' : ''}" type="button" aria-label="${bmLabel}" title="${bmLabel}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>
         </div>
         ${descHtml}
       </div>`;
@@ -107,6 +124,7 @@ const Renderer = (() => {
       const el = document.createElement('div');
       el.className = 'skeleton';
       el.innerHTML = `
+        <div class="skeleton-img"></div>
         <div class="skeleton-body">
           <div class="skeleton-line w80"></div>
           <div class="skeleton-line w60"></div>
