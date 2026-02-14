@@ -1,5 +1,8 @@
+mod agents;
 mod claude;
 mod db;
+mod degradation_agent;
+mod enrichment_agent;
 mod fetcher;
 mod mcp;
 mod routes;
@@ -133,6 +136,12 @@ async fn main() {
     // Spawn TTS pre-cache background task
     tokio::spawn(tts_cache::run(Arc::clone(&state)));
 
+    // Spawn enrichment agent background task
+    tokio::spawn(enrichment_agent::run(Arc::clone(&state)));
+
+    // Spawn degradation agent background task
+    tokio::spawn(degradation_agent::run(Arc::clone(&state)));
+
     let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
     let api_routes = Router::new()
         .route("/article/:id", get({
@@ -156,6 +165,9 @@ async fn main() {
         }))
         .route("/api/articles", get(routes::get_articles))
         .route("/api/articles/:id", get(routes::get_article_by_id))
+        .route("/api/articles/:id/view", post(routes::handle_article_view))
+        .route("/api/articles/:id/click", post(routes::handle_article_click))
+        .route("/api/articles/:id/enrichments", get(routes::handle_get_enrichments))
         .route("/api/categories", get(routes::get_categories))
         .route("/api/search", get(routes::handle_search))
         .route("/api/image-proxy", get(routes::handle_image_proxy))
@@ -163,6 +175,8 @@ async fn main() {
         .route("/api/articles/summarize", post(routes::handle_summarize))
         .route("/api/articles/questions", post(routes::handle_article_questions))
         .route("/api/articles/ask", post(routes::handle_article_ask))
+        .route("/api/articles/classify", post(routes::handle_article_classify))
+        .route("/api/articles/action-plan", post(routes::handle_action_plan))
         .route("/api/tts/to-reading", post(routes::handle_to_reading))
         .route("/api/tts/voices", get(routes::handle_tts_voices))
         .route("/api/tts", post(routes::handle_tts))
@@ -221,6 +235,7 @@ async fn main() {
             "https://news.claud".parse::<HeaderValue>().unwrap(),
             "https://news-xyz.fly.dev".parse::<HeaderValue>().unwrap(),
             "https://news-online.fly.dev".parse::<HeaderValue>().unwrap(),
+            "https://news-cloud.fly.dev".parse::<HeaderValue>().unwrap(),
             "http://localhost:8080".parse::<HeaderValue>().unwrap(),
         ]))
         .allow_methods([

@@ -33,12 +33,21 @@ impl Db {
                 published_at TEXT NOT NULL,
                 fetched_at TEXT NOT NULL,
                 group_id TEXT,
-                group_count INTEGER
+                group_count INTEGER,
+                view_count INTEGER NOT NULL DEFAULT 0,
+                click_count INTEGER NOT NULL DEFAULT 0,
+                enrichment_status TEXT,
+                enriched_at TEXT,
+                popularity_score REAL NOT NULL DEFAULT 0.0
             );
             CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
                 ON articles(category, published_at DESC);
             CREATE INDEX IF NOT EXISTS idx_articles_pub
                 ON articles(published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_popularity
+                ON articles(popularity_score DESC, published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_enrichment_status
+                ON articles(enrichment_status);
 
             CREATE TABLE IF NOT EXISTS feeds (
                 feed_id TEXT PRIMARY KEY,
@@ -115,7 +124,22 @@ impl Db {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);",
+            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);
+
+            CREATE TABLE IF NOT EXISTS enrichments (
+                enrichment_id TEXT PRIMARY KEY,
+                article_id TEXT NOT NULL,
+                agent_type TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_enrichments_article
+                ON enrichments(article_id, status);",
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
 
@@ -1047,6 +1071,310 @@ impl Db {
             info!(user_id = %user_id, "Konami code claimed");
         }
         Ok(affected > 0)
+    }
+
+    // --- Enrichment & Popularity ---
+
+    /// Increment view count for an article and update popularity score.
+    pub fn increment_view_count(&self, article_id: &str) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE articles SET view_count = view_count + 1 WHERE id = ?1",
+            params![article_id],
+        )
+        .map_err(|e| format!("Increment view: {e}"))?;
+
+        // Update popularity score: view_count * 0.7 + click_count * 0.3
+        conn.execute(
+            "UPDATE articles SET popularity_score = view_count * 0.7 + click_count * 0.3 WHERE id = ?1",
+            params![article_id],
+        )
+        .map_err(|e| format!("Update popularity: {e}"))?;
+
+        let view_count: i64 = conn
+            .query_row(
+                "SELECT view_count FROM articles WHERE id = ?1",
+                params![article_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Get view count: {e}"))?;
+        Ok(view_count)
+    }
+
+    /// Increment click count for an article and update popularity score.
+    pub fn increment_click_count(&self, article_id: &str) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE articles SET click_count = click_count + 1 WHERE id = ?1",
+            params![article_id],
+        )
+        .map_err(|e| format!("Increment click: {e}"))?;
+
+        // Update popularity score
+        conn.execute(
+            "UPDATE articles SET popularity_score = view_count * 0.7 + click_count * 0.3 WHERE id = ?1",
+            params![article_id],
+        )
+        .map_err(|e| format!("Update popularity: {e}"))?;
+
+        let click_count: i64 = conn
+            .query_row(
+                "SELECT click_count FROM articles WHERE id = ?1",
+                params![article_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Get click count: {e}"))?;
+        Ok(click_count)
+    }
+
+    /// Get popular articles by percentile range (e.g., top 10-20%).
+    /// Returns articles with popularity_score in the specified percentile range, ordered by score DESC.
+    pub fn get_popular_articles(&self, min_percentile: f64, max_percentile: f64, limit: i64) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        // Get total article count
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM articles WHERE popularity_score > 0", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        if total == 0 {
+            return Ok(Vec::new());
+        }
+
+        // Calculate offset and limit based on percentiles
+        let skip = ((100.0 - max_percentile) / 100.0 * total as f64).floor() as i64;
+        let take = (((max_percentile - min_percentile) / 100.0 * total as f64).ceil() as i64).min(limit);
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles
+                 WHERE popularity_score > 0
+                 ORDER BY popularity_score DESC, published_at DESC
+                 LIMIT ?1 OFFSET ?2",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let articles = stmt
+            .query_map(params![take, skip], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(articles)
+    }
+
+    /// Update enrichment status for an article.
+    pub fn update_enrichment_status(&self, article_id: &str, status: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE articles SET enrichment_status = ?1, enriched_at = ?2 WHERE id = ?3",
+            params![status, now, article_id],
+        )
+        .map_err(|e| format!("Update enrichment status: {e}"))?;
+        Ok(())
+    }
+
+    /// Create an enrichment record.
+    pub fn create_enrichment(
+        &self,
+        enrichment_id: &str,
+        article_id: &str,
+        agent_type: &str,
+        content_type: &str,
+        data_json: &str,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO enrichments (enrichment_id, article_id, agent_type, content_type, data_json, status, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
+            params![enrichment_id, article_id, agent_type, content_type, data_json, now],
+        )
+        .map_err(|e| format!("Create enrichment: {e}"))?;
+        info!(enrichment_id, article_id, agent_type, "Enrichment created");
+        Ok(())
+    }
+
+    /// Update enrichment status.
+    pub fn update_enrichment(
+        &self,
+        enrichment_id: &str,
+        status: &str,
+        data_json: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        if let Some(data) = data_json {
+            conn.execute(
+                "UPDATE enrichments SET status = ?1, data_json = ?2, completed_at = ?3, error_message = ?4 WHERE enrichment_id = ?5",
+                params![status, data, now, error_message, enrichment_id],
+            )
+        } else {
+            conn.execute(
+                "UPDATE enrichments SET status = ?1, completed_at = ?2, error_message = ?3 WHERE enrichment_id = ?4",
+                params![status, now, error_message, enrichment_id],
+            )
+        }
+        .map_err(|e| format!("Update enrichment: {e}"))?;
+        Ok(())
+    }
+
+    /// Get all enrichments for an article.
+    pub fn get_enrichments(&self, article_id: &str) -> Result<Vec<(String, String, String, String, String)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT enrichment_id, agent_type, content_type, data_json, status
+                 FROM enrichments
+                 WHERE article_id = ?1 AND status = 'completed'
+                 ORDER BY created_at DESC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let enrichments = stmt
+            .query_map(params![article_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(enrichments)
+    }
+
+    /// Degrade images for old unpopular articles (older than hours_old, below median popularity).
+    pub fn degrade_old_unpopular_images(&self, hours_old: i64) -> Result<usize, String> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::hours(hours_old)).to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        // Get median popularity score for old articles
+        let median_score: f64 = conn
+            .query_row(
+                "SELECT popularity_score FROM articles
+                 WHERE published_at < ?1 AND popularity_score > 0
+                 ORDER BY popularity_score
+                 LIMIT 1 OFFSET (SELECT COUNT(*) FROM articles WHERE published_at < ?1 AND popularity_score > 0) / 2",
+                params![cutoff],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+
+        // Degrade images for articles below median popularity
+        let degraded = conn
+            .execute(
+                "UPDATE articles
+                 SET image_url = NULL
+                 WHERE published_at < ?1
+                 AND popularity_score < ?2
+                 AND popularity_score > 0
+                 AND image_url IS NOT NULL",
+                params![cutoff, median_score],
+            )
+            .map_err(|e| format!("Degrade images: {}", e))?;
+
+        Ok(degraded)
+    }
+
+    /// Delete bottom 80% of articles older than days_old (keep top 20% by popularity).
+    pub fn cleanup_old_articles_bottom_80(&self, days_old: i64) -> Result<usize, String> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(days_old)).to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        // Get 20th percentile popularity score for old articles
+        let percentile_20_score: f64 = conn
+            .query_row(
+                "SELECT popularity_score FROM articles
+                 WHERE published_at < ?1
+                 ORDER BY popularity_score DESC
+                 LIMIT 1 OFFSET (SELECT COUNT(*) * 20 / 100 FROM articles WHERE published_at < ?1)",
+                params![cutoff],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
+
+        // Delete bottom 80% (below 20th percentile)
+        let deleted = conn
+            .execute(
+                "DELETE FROM articles
+                 WHERE published_at < ?1
+                 AND popularity_score < ?2",
+                params![cutoff, percentile_20_score],
+            )
+            .map_err(|e| format!("Delete old articles: {}", e))?;
+
+        Ok(deleted)
+    }
+
+    /// Get articles pending enrichment.
+    pub fn get_pending_enrichment_articles(&self, limit: i64) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles
+                 WHERE enrichment_status = 'pending'
+                 ORDER BY popularity_score DESC, published_at DESC
+                 LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let articles = stmt
+            .query_map(params![limit], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(articles)
+    }
+
+    /// Get fresh articles within specified time window (in minutes).
+    pub fn get_fresh_articles(
+        &self,
+        category: Option<&Category>,
+        minutes: i64,
+        limit: i64,
+    ) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let cutoff = (chrono::Utc::now() - chrono::Duration::minutes(minutes))
+            .to_rfc3339();
+
+        let sql = if category.is_some() {
+            "SELECT id, category, title, url, description, image_url, source,
+                    published_at, fetched_at, group_id, group_count
+             FROM articles
+             WHERE category = ?1 AND published_at >= ?2
+             ORDER BY published_at DESC
+             LIMIT ?3"
+        } else {
+            "SELECT id, category, title, url, description, image_url, source,
+                    published_at, fetched_at, group_id, group_count
+             FROM articles
+             WHERE published_at >= ?1
+             ORDER BY published_at DESC
+             LIMIT ?2"
+        };
+
+        let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+
+        let articles = if let Some(cat) = category {
+            stmt.query_map(params![cat.as_str(), cutoff, limit], row_to_article)
+        } else {
+            stmt.query_map(params![cutoff, limit], row_to_article)
+        }
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+        Ok(articles)
     }
 }
 

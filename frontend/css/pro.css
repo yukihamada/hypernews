@@ -17,6 +17,24 @@
   background: rgba(10, 10, 26, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pro-lang-btn {
+  background: transparent;
+  border: 1px solid #404060;
+  color: #94a3b8;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.pro-lang-btn:hover {
+  border-color: #60a5fa;
+  color: #60a5fa;
 }
 
 .pro-nav__back {

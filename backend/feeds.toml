@@ -637,6 +637,103 @@ url = "https://nazology.net/feed"
 source = "ナゾロジー"
 category = "science"
 
+# --- Timemachine (情報のタイムマシン: 海外の最先端) ---
+[[feeds]]
+url = "https://www.producthunt.com/feed"
+source = "Product Hunt"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/reddit/subreddit/technology"
+source = "Reddit r/technology"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/reddit/subreddit/futurology"
+source = "Reddit r/futurology"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/reddit/subreddit/artificial"
+source = "Reddit r/artificial"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/substack/newsletter/platformer"
+source = "Platformer (Substack)"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/substack/newsletter/stratechery"
+source = "Stratechery (Substack)"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/x/user/elonmusk"
+source = "Elon Musk (X)"
+category = "timemachine"
+
+[[feeds]]
+url = "https://rsshub.app/x/user/sama"
+source = "Sam Altman (X)"
+category = "timemachine"
+
+[[feeds]]
+url = "https://www.ben-evans.com/feed"
+source = "Benedict Evans"
+category = "timemachine"
+
+[[feeds]]
+url = "https://waitbutwhy.com/feed"
+source = "Wait But Why"
+category = "timemachine"
+
+# --- Goldmining (砂金掘り: 一次情報を噛み砕く) ---
+[[feeds]]
+url = "https://rss.arxiv.org/rss/cs.LG"
+source = "arXiv Machine Learning"
+category = "goldmining"
+
+[[feeds]]
+url = "https://rss.arxiv.org/rss/q-bio"
+source = "arXiv Quantitative Biology"
+category = "goldmining"
+
+[[feeds]]
+url = "https://rss.arxiv.org/rss/econ"
+source = "arXiv Economics"
+category = "goldmining"
+
+[[feeds]]
+url = "https://patents.google.com/rss?q=assignee:Google"
+source = "Google Patents"
+category = "goldmining"
+
+[[feeds]]
+url = "https://patents.google.com/rss?q=assignee:Apple"
+source = "Apple Patents"
+category = "goldmining"
+
+[[feeds]]
+url = "https://patents.google.com/rss?q=assignee:Tesla"
+source = "Tesla Patents"
+category = "goldmining"
+
+[[feeds]]
+url = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&CIK=&type=&company=&dateb=&owner=include&start=0&count=40&output=atom"
+source = "SEC Filings"
+category = "goldmining"
+
+[[feeds]]
+url = "https://www.who.int/feeds/entity/csr/don/en/rss.xml"
+source = "WHO Disease Outbreak News"
+category = "goldmining"
+
+[[feeds]]
+url = "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml"
+source = "FDA Press Releases"
+category = "goldmining"
+
 # --- Podcast ---
 [[feeds]]
 url = "https://feeds.npr.org/510318/podcast.xml"

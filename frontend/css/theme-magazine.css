@@ -68,16 +68,37 @@
   max-width: 780px;
 }
 
-/* Articles */
+/* Articles - Grid layout like newspaper */
 [data-theme="magazine"] .articles {
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
 }
 [data-theme="magazine"] .article {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Article with image */
+[data-theme="magazine"] .article-img-wrap {
+  width: 100%;
+  height: 0;
+  padding-bottom: 60%;
   border-radius: 0;
-  padding: 1rem 0;
+}
+[data-theme="magazine"] .article-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+[data-theme="magazine"] .article-body {
+  padding: 0.875rem;
 }
 [data-theme="magazine"] .article:first-child {
   padding-top: 0.5rem;

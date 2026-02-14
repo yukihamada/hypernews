@@ -361,6 +361,9 @@
     initBtnGroup('typewriter-btns', 'typewriterSpeed', { label: 'Typewriter', int: true });
     loadVoicePicker();
 
+    // Murmur toggle
+    initToggle('toggle-murmur', 'feed_murmur');
+
     // EcoSystem Cache Rate
     initSlider('cache-rate-range', 'cache-rate-val', 'ecoCacheRate', '%', v => Math.round(v));
 

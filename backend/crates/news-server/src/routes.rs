@@ -224,6 +224,8 @@ pub struct ArticlesQuery {
     pub category: Option<String>,
     pub limit: Option<i64>,
     pub cursor: Option<String>,
+    /// Freshness filter in minutes (e.g., 10 for articles from last 10 minutes)
+    pub freshness: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -251,9 +253,17 @@ pub async fn get_articles(
     let category = params.category.as_deref().and_then(Category::from_str);
     let limit = params.limit.unwrap_or(30).min(100).max(1);
 
-    let result = state
-        .db
-        .query_articles(category.as_ref(), limit, params.cursor.as_deref());
+    // Check if freshness filter is requested (e.g., ?freshness=10 for 10 minutes)
+    let result = if let Some(minutes) = params.freshness {
+        state
+            .db
+            .get_fresh_articles(category.as_ref(), minutes, limit)
+            .map(|articles| (articles, None))
+    } else {
+        state
+            .db
+            .query_articles(category.as_ref(), limit, params.cursor.as_deref())
+    };
 
     match result {
         Ok((mut articles, next_cursor)) => {
@@ -1265,13 +1275,22 @@ pub async fn handle_article_ask(
         String::new()
     };
 
+    // Transform question to positive if needed
+    let positive_question = claude::transform_question_to_positive(
+        &state.http_client,
+        &state.api_key,
+        &body.question,
+    )
+    .await
+    .unwrap_or_else(|_| body.question.clone());
+
     match claude::answer_question(
         &state.http_client,
         &state.api_key,
         &body.title,
         &body.description,
         &body.source,
-        &body.question,
+        &positive_question,
         &article_content,
         body.custom_prompt.as_deref(),
     )
@@ -1288,6 +1307,152 @@ pub async fn handle_article_ask(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "回答の生成に失敗しました。しばらくしてお試しください。"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// --- Smart News APIs ---
+
+#[derive(Deserialize)]
+pub struct ClassifyRequest {
+    pub title: String,
+    pub description: String,
+    pub source: String,
+    pub category: String,
+}
+
+#[derive(Deserialize)]
+pub struct ActionPlanRequest {
+    pub title: String,
+    pub description: String,
+    pub url: Option<String>,
+    pub classification: Option<String>,
+}
+
+pub async fn handle_article_classify(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ClassifyRequest>,
+) -> Response {
+    let tier = extract_user_tier(&headers, &state.db);
+    if let Err(resp) = check_rate_limit(&state.db, &tier, "classify") {
+        return resp;
+    }
+
+    if state.api_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "APIキーが設定されていません"})),
+        )
+            .into_response();
+    }
+
+    // Cache check
+    let ckey = cache_key("classify", &format!("{}|{}|{}", body.title, body.source, body.category));
+    if let Ok(Some(cached)) = state.db.get_cache(&ckey) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&cached) {
+            return (StatusCode::OK, Json(val)).into_response();
+        }
+    }
+
+    match claude::classify_article(
+        &state.http_client,
+        &state.api_key,
+        &body.title,
+        &body.description,
+        &body.source,
+        &body.category,
+    )
+    .await
+    {
+        Ok(classification) => {
+            increment_usage_if_needed(&state.db, &tier, "classify");
+            let resp_json = serde_json::json!({
+                "category": classification.category,
+                "reasoning": classification.reasoning,
+                "tags": classification.tags
+            });
+            let _ = state.db.set_cache(&ckey, "classify", &resp_json.to_string(), 86400); // 24h
+            (StatusCode::OK, Json(resp_json)).into_response()
+        }
+        Err(e) => {
+            warn!(error = %e, "Classification failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "分類に失敗しました"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+pub async fn handle_action_plan(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ActionPlanRequest>,
+) -> Response {
+    let tier = extract_user_tier(&headers, &state.db);
+    if let Err(resp) = check_rate_limit(&state.db, &tier, "action_plan") {
+        return resp;
+    }
+
+    if state.api_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "APIキーが設定されていません"})),
+        )
+            .into_response();
+    }
+
+    // Cache check
+    let url_for_key = body.url.as_deref().unwrap_or("");
+    let ckey = cache_key("action_plan", &format!("{}|{}", body.title, url_for_key));
+    if let Ok(Some(cached)) = state.db.get_cache(&ckey) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&cached) {
+            return (StatusCode::OK, Json(val)).into_response();
+        }
+    }
+
+    // Fetch article content if URL provided
+    let article_content = if let Some(ref url) = body.url {
+        if !url.is_empty() {
+            news_core::ogp::fetch_article_content(&state.http_client, url).await.unwrap_or_default()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let classification = body.classification.as_deref().unwrap_or("general");
+
+    match claude::generate_action_plan(
+        &state.http_client,
+        &state.api_key,
+        &body.title,
+        &body.description,
+        &article_content,
+        classification,
+    )
+    .await
+    {
+        Ok(plan) => {
+            increment_usage_if_needed(&state.db, &tier, "action_plan");
+            let resp_json = serde_json::json!({
+                "summary": plan.summary,
+                "steps": plan.steps,
+                "tools_or_templates": plan.tools_or_templates
+            });
+            let _ = state.db.set_cache(&ckey, "action_plan", &resp_json.to_string(), 86400); // 24h
+            (StatusCode::OK, Json(resp_json)).into_response()
+        }
+        Err(e) => {
+            warn!(error = %e, "Action plan generation failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "アクションプランの生成に失敗しました"})),
             )
                 .into_response()
         }
@@ -2471,8 +2636,8 @@ pub async fn handle_subscribe(
     }
 
     let client_ref = body.device_id.unwrap_or_default();
-    let success_url = format!("{}/pro/success?session_id={{CHECKOUT_SESSION_ID}}", state.base_url);
-    let cancel_url = format!("{}/pro/cancel", state.base_url);
+    let success_url = format!("{}/pro.html?session_id={{CHECKOUT_SESSION_ID}}", state.base_url);
+    let cancel_url = format!("{}/pro.html", state.base_url);
 
     match stripe::create_checkout_session(
         &state.http_client,
@@ -3069,14 +3234,14 @@ const SITE_METAS: &[SiteMeta] = &[
     SiteMeta {
         _site_id: "xyz",
         name: "news.xyz",
-        title: "news.xyz - AI-Powered News",
-        description: "Smart news with AI-generated summaries, Q&A, and voice reading. The fastest AI news aggregator.",
-        description_long: "AI-Powered News Aggregator. Get the latest news across tech, business, entertainment, sports, and science with AI summaries, voice reading, and interactive Q&A.",
+        title: "news.xyz \u{2014} AI News, Blazing Fast | Built in Rust",
+        description: "The $56,000 domain running the fastest AI news aggregator. 146+ feeds, AI summaries, voice news, 8 themes. Rust-powered. Ad-free.",
+        description_long: "The $56,000 domain running the fastest AI news aggregator. 146+ RSS feeds, AI summaries, Q&A, voice news, podcast generation, 8 themes. Built entirely in Rust. Ad-free.",
         url: "https://news.xyz/",
-        image: "https://news.xyz/icons/icon-512.png",
+        image: "https://news.xyz/icons/og-xyz.png",
         theme_color: "#1a1a2e",
         lang: "en",
-        keywords: "news,AI,artificial intelligence,news aggregator,AI summary,voice news,tech news,breaking news",
+        keywords: "news,AI,artificial intelligence,news aggregator,AI summary,voice news,tech news,breaking news,Rust,56000 dollar domain",
     },
     SiteMeta {
         _site_id: "online",
@@ -3093,14 +3258,14 @@ const SITE_METAS: &[SiteMeta] = &[
     SiteMeta {
         _site_id: "cloud",
         name: "news.cloud",
-        title: "news.cloud - News API Platform",
-        description: "Developer-friendly news aggregation API. AI summaries, article search, podcast generation, and MCP support.",
-        description_long: "News API Platform for developers. Access AI-powered news aggregation, article search, AI summaries, podcast generation, and MCP integration via a simple REST API.",
+        title: "news.cloud \u{2014} News API Platform for Developers",
+        description: "The engine behind news.xyz. Developer-friendly News API with AI summaries, podcast generation, and MCP support.",
+        description_long: "The engine behind news.xyz. Developer-friendly News API with AI summaries, article search, podcast generation, TTS, and MCP integration. Built in Rust.",
         url: "https://news.cloud/",
-        image: "https://news.cloud/icons/icon-512.png",
+        image: "https://news.cloud/icons/og-cloud.png",
         theme_color: "#0f172a",
         lang: "en",
-        keywords: "news API,developer API,news aggregation,AI API,MCP,REST API,news data,news platform",
+        keywords: "news API,developer API,news aggregation,AI API,MCP,REST API,news data,news platform,Rust",
     },
     SiteMeta {
         _site_id: "chatnews",
@@ -3340,4 +3505,111 @@ pub async fn serve_sitemap_xml(
         .header(header::CACHE_CONTROL, "public, max-age=600")
         .body(Body::from(xml))
         .unwrap()
+}
+
+// --- Enrichment API ---
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ViewClickResponse {
+    success: bool,
+    count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EnrichmentData {
+    agent_type: String,
+    content_type: String,
+    data: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EnrichmentsResponse {
+    enrichments: Vec<EnrichmentData>,
+}
+
+/// POST /api/articles/:id/view
+pub async fn handle_article_view(
+    State(state): State<Arc<AppState>>,
+    Path(article_id): Path<String>,
+) -> Response {
+    match state.db.increment_view_count(&article_id) {
+        Ok(count) => {
+            // Check if this article should be enriched (top 10-20%)
+            // This is done asynchronously by the enrichment agent
+            (
+                StatusCode::OK,
+                Json(ViewClickResponse {
+                    success: true,
+                    count,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            warn!(error = %e, article_id, "Failed to increment view count");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to update view count"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST /api/articles/:id/click
+pub async fn handle_article_click(
+    State(state): State<Arc<AppState>>,
+    Path(article_id): Path<String>,
+) -> Response {
+    match state.db.increment_click_count(&article_id) {
+        Ok(count) => (
+            StatusCode::OK,
+            Json(ViewClickResponse {
+                success: true,
+                count,
+            }),
+        )
+            .into_response(),
+        Err(e) => {
+            warn!(error = %e, article_id, "Failed to increment click count");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to update click count"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// GET /api/articles/:id/enrichments
+pub async fn handle_get_enrichments(
+    State(state): State<Arc<AppState>>,
+    Path(article_id): Path<String>,
+) -> Response {
+    match state.db.get_enrichments(&article_id) {
+        Ok(rows) => {
+            let enrichments: Vec<EnrichmentData> = rows
+                .into_iter()
+                .filter_map(|(_, agent_type, content_type, data_json, _)| {
+                    serde_json::from_str::<serde_json::Value>(&data_json)
+                        .ok()
+                        .map(|data| EnrichmentData {
+                            agent_type,
+                            content_type,
+                            data,
+                        })
+                })
+                .collect();
+
+            (StatusCode::OK, Json(EnrichmentsResponse { enrichments })).into_response()
+        }
+        Err(e) => {
+            warn!(error = %e, article_id, "Failed to get enrichments");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get enrichments"})),
+            )
+                .into_response()
+        }
+    }
 }

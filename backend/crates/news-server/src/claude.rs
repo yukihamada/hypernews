@@ -206,6 +206,78 @@ pub async fn generate_questions(
     Ok(questions)
 }
 
+/// Transform a potentially negative question into a positive, constructive one.
+pub async fn transform_question_to_positive(
+    client: &reqwest::Client,
+    api_key: &str,
+    question: &str,
+) -> Result<String, String> {
+    // Quick check: if question is already positive, return as-is
+    let negative_keywords = ["なぜダメ", "なぜ悪い", "問題", "失敗", "批判", "ひどい", "最悪"];
+    let has_negative = negative_keywords.iter().any(|&kw| question.contains(kw));
+
+    if !has_negative && question.len() < 100 {
+        return Ok(question.to_string());
+    }
+
+    let prompt = format!(
+        "以下の質問をポジティブでシンプルな質問に変換してください。\n\n\
+        ルール:\n\
+        - ネガティブな表現（批判、問題点、失敗等）をポジティブな問いに変換\n\
+        - 「なぜダメか」→「どうすればよいか」「どのような改善策があるか」\n\
+        - 「なぜ失敗したか」→「成功のために何が必要か」「次にどう活かすか」\n\
+        - シンプルで建設的な質問にする（50文字以内）\n\
+        - 変換後の質問テキストのみ出力（説明不要）\n\n\
+        元の質問: {}",
+        question
+    );
+
+    let request = ClaudeRequest {
+        model: "claude-haiku-4-5-20251001".into(),
+        max_tokens: 256,
+        messages: vec![ClaudeMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Claude API request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        // If transformation fails, return original question
+        warn!("Question transformation failed, using original");
+        return Ok(question.to_string());
+    }
+
+    let claude_response: ClaudeResponse = response
+        .json()
+        .await
+        .map_err(|_| "Failed to parse response".to_string())?;
+
+    let transformed = claude_response
+        .content
+        .first()
+        .and_then(|b| b.text.as_ref())
+        .map(|t| t.trim().to_string())
+        .unwrap_or_else(|| question.to_string());
+
+    info!(
+        original = %question,
+        transformed = %transformed,
+        "Question transformed to positive"
+    );
+
+    Ok(transformed)
+}
+
 pub async fn answer_question(
     client: &reqwest::Client,
     api_key: &str,
@@ -511,6 +583,162 @@ pub async fn generate_murmur(
 
     info!(chars = text.len(), "Murmur generated");
     Ok(text.trim().to_string())
+}
+
+// --- Smart News Classification & Action Plans ---
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ArticleClassification {
+    pub category: String,  // "timemachine" | "goldmining" | "frustration" | "general"
+    pub reasoning: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActionPlan {
+    pub summary: String,           // 1行サマリー
+    pub steps: Vec<String>,        // 具体的なアクション3-5個
+    pub tools_or_templates: Vec<String>,  // 使えるツール・テンプレート
+}
+
+/// 記事を「タイムマシン」「砂金掘り」「不満の可視化」に自動分類
+pub async fn classify_article(
+    client: &reqwest::Client,
+    api_key: &str,
+    title: &str,
+    description: &str,
+    source: &str,
+    category: &str,
+) -> Result<ArticleClassification, String> {
+    let prompt = format!(
+        "以下のニュース記事を分類してください。\n\n\
+        ## 分類カテゴリ\n\
+        1. **timemachine（情報のタイムマシン）**: 海外の最先端情報で、日本ではまだ知られていない。Product Hunt、Reddit、海外Substack、先進的な技術論文など\n\
+        2. **goldmining（砂金掘り）**: 官公庁資料、特許、学術論文、SEC申請書類など、難解な一次情報を噛み砕いて解説\n\
+        3. **frustration（不満の可視化）**: ユーザーの困りごと、不満、問題点を可視化。Yahoo!知恵袋、Xの不満ツイート、低評価レビューなど\n\
+        4. **general（一般）**: 上記に当てはまらない通常のニュース\n\n\
+        ## ルール\n\
+        - 記事のソースとカテゴリを考慮して最も適切な分類を選ぶ\n\
+        - reasoningに分類の理由を簡潔に（50文字以内）\n\
+        - tagsに関連タグを2-3個（例: [\"AI\", \"スタートアップ\", \"日本未上陸\"]）\n\
+        - JSON出力のみ: {{\"category\":\"...\",\"reasoning\":\"...\",\"tags\":[...]}}\n\n\
+        ## 記事\nタイトル: {}\nソース: {}\nカテゴリ: {}\n概要: {}",
+        title, source, category, description
+    );
+
+    let request = ClaudeRequest {
+        model: "claude-haiku-4-5-20251001".into(),
+        max_tokens: 256,
+        messages: vec![ClaudeMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Claude API request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        warn!(status = %status, body = %body, "Claude API error (classify)");
+        return Err(format!("Claude API error: {} - {}", status, body));
+    }
+
+    let claude_response: ClaudeResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Claude response: {}", e))?;
+
+    let text = claude_response
+        .content
+        .first()
+        .and_then(|b| b.text.as_ref())
+        .ok_or_else(|| "Empty response from Claude".to_string())?;
+
+    let clean = text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+    let classification: ArticleClassification = serde_json::from_str(clean)
+        .map_err(|e| format!("Failed to parse classification: {} — raw: {}", e, text))?;
+
+    Ok(classification)
+}
+
+/// 「で、どうすればいい？」のアクションプランを生成
+pub async fn generate_action_plan(
+    client: &reqwest::Client,
+    api_key: &str,
+    title: &str,
+    description: &str,
+    article_content: &str,
+    classification: &str,
+) -> Result<ActionPlan, String> {
+    let content_section = if article_content.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n## 記事本文\n{}", &article_content[..article_content.len().min(2000)])
+    };
+
+    let prompt = format!(
+        "以下のニュース記事を読んだ人が「で、どうすればいい？」と思った時の具体的なアクションプランを生成してください。\n\n\
+        ## ルール\n\
+        - summary: 1行で「〇〇すべき」「〇〇をチェック」など具体的な指針（30文字以内）\n\
+        - steps: 今すぐできる具体的なアクション3-5個（各50文字以内）\n\
+        - tools_or_templates: 使えるツール、テンプレート、リンク先の提案2-3個\n\
+        - 記事の分類（{}）を考慮する\n\
+        - JSON出力のみ: {{\"summary\":\"...\",\"steps\":[...],\"tools_or_templates\":[...]}}\n\n\
+        ## 記事\nタイトル: {}\n概要: {}{}",
+        classification, title, description, content_section
+    );
+
+    let request = ClaudeRequest {
+        model: "claude-sonnet-4-5-20250929".into(),
+        max_tokens: 768,
+        messages: vec![ClaudeMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+    };
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Claude API request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        warn!(status = %status, body = %body, "Claude API error (action_plan)");
+        return Err(format!("Claude API error: {} - {}", status, body));
+    }
+
+    let claude_response: ClaudeResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Claude response: {}", e))?;
+
+    let text = claude_response
+        .content
+        .first()
+        .and_then(|b| b.text.as_ref())
+        .ok_or_else(|| "Empty response from Claude".to_string())?;
+
+    let clean = text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+    let action_plan: ActionPlan = serde_json::from_str(clean)
+        .map_err(|e| format!("Failed to parse action plan: {} — raw: {}", e, text))?;
+
+    Ok(action_plan)
 }
 
 pub async fn interpret_command(
