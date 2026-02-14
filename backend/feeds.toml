@@ -834,3 +834,229 @@ category = "podcast"
 url = "https://anchor.fm/s/2f1a21d8/podcast/rss"
 source = "Coder Radio"
 category = "podcast"
+
+# --- Additional Japanese News ---
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat1.xml"
+source = "NHK 社会"
+category = "general"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat2.xml"
+source = "NHK 文化・エンタメ"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat3.xml"
+source = "NHK 科学・医療"
+category = "science"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat4.xml"
+source = "NHK 政治"
+category = "general"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat5.xml"
+source = "NHK 経済"
+category = "business"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat6.xml"
+source = "NHK 国際"
+category = "general"
+
+[[feeds]]
+url = "https://www3.nhk.or.jp/rss/news/cat7.xml"
+source = "NHK スポーツ"
+category = "sports"
+
+[[feeds]]
+url = "https://rsshub.app/nikkei/index"
+source = "日本経済新聞"
+category = "business"
+
+[[feeds]]
+url = "https://rsshub.app/asahi/national"
+source = "朝日新聞 国内"
+category = "general"
+
+[[feeds]]
+url = "https://rsshub.app/mainichi"
+source = "毎日新聞"
+category = "general"
+
+[[feeds]]
+url = "https://rsshub.app/yomiuri/national"
+source = "読売新聞 国内"
+category = "general"
+
+[[feeds]]
+url = "https://rsshub.app/itmedia/news"
+source = "ITmedia"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/itmedia/business"
+source = "ITmedia ビジネス"
+category = "business"
+
+[[feeds]]
+url = "https://rsshub.app/watch.impress.co.jp"
+source = "Impress Watch"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/newspicks/topics/104"
+source = "NewsPicks テクノロジー"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/newspicks/topics/101"
+source = "NewsPicks スタートアップ"
+category = "business"
+
+# --- Additional Tech News ---
+[[feeds]]
+url = "https://rsshub.app/github/trending/weekly"
+source = "GitHub Trending"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/producthunt/today"
+source = "Product Hunt"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/reddit/subreddit/programming"
+source = "r/programming"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/reddit/subreddit/technology"
+source = "r/technology"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/lobsters"
+source = "Lobsters"
+category = "tech"
+
+[[feeds]]
+url = "https://dev.to/feed"
+source = "DEV Community"
+category = "tech"
+
+[[feeds]]
+url = "https://www.theverge.com/rss/index.xml"
+source = "The Verge - All"
+category = "tech"
+
+[[feeds]]
+url = "https://techcrunch.com/feed/"
+source = "TechCrunch - All"
+category = "tech"
+
+[[feeds]]
+url = "https://www.engadget.com/rss.xml"
+source = "Engadget"
+category = "tech"
+
+[[feeds]]
+url = "https://arstechnica.com/feed/"
+source = "Ars Technica"
+category = "tech"
+
+# --- Additional Business News ---
+[[feeds]]
+url = "https://rsshub.app/bloomberg/technology"
+source = "Bloomberg Tech"
+category = "tech"
+
+[[feeds]]
+url = "https://rsshub.app/wsj/latest"
+source = "WSJ Latest"
+category = "business"
+
+[[feeds]]
+url = "https://www.ft.com/?format=rss"
+source = "Financial Times"
+category = "business"
+
+[[feeds]]
+url = "https://fortune.com/feed/"
+source = "Fortune"
+category = "business"
+
+[[feeds]]
+url = "https://hbr.org/feed"
+source = "Harvard Business Review"
+category = "business"
+
+# --- Additional Science News ---
+[[feeds]]
+url = "https://www.nature.com/nature.rss"
+source = "Nature"
+category = "science"
+
+[[feeds]]
+url = "https://www.sciencemag.org/rss/news_current.xml"
+source = "Science Magazine"
+category = "science"
+
+[[feeds]]
+url = "https://www.scientificamerican.com/feed/"
+source = "Scientific American"
+category = "science"
+
+[[feeds]]
+url = "https://www.space.com/feeds/all"
+source = "Space.com"
+category = "science"
+
+[[feeds]]
+url = "https://phys.org/rss-feed/"
+source = "Phys.org"
+category = "science"
+
+# --- Additional Entertainment News ---
+[[feeds]]
+url = "https://variety.com/feed/"
+source = "Variety"
+category = "entertainment"
+
+[[feeds]]
+url = "https://deadline.com/feed/"
+source = "Deadline"
+category = "entertainment"
+
+[[feeds]]
+url = "https://www.thewrap.com/feed/"
+source = "TheWrap"
+category = "entertainment"
+
+[[feeds]]
+url = "https://rsshub.app/imdb/coming-soon"
+source = "IMDb Coming Soon"
+category = "entertainment"
+
+# --- Additional Sports News ---
+[[feeds]]
+url = "https://www.espn.com/espn/rss/news"
+source = "ESPN"
+category = "sports"
+
+[[feeds]]
+url = "https://www.si.com/.rss/si/topstories"
+source = "Sports Illustrated"
+category = "sports"
+
+[[feeds]]
+url = "https://rsshub.app/nba/app_news"
+source = "NBA News"
+category = "sports"
+
+[[feeds]]
+url = "https://www.skysports.com/rss/12040"
+source = "Sky Sports"
+category = "sports"
