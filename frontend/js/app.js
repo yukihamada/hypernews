@@ -548,7 +548,10 @@ const App = (() => {
       const spinner = document.getElementById('scroll-spinner');
       if (spinner) spinner.remove();
 
-      Renderer.render(els.articles, data.articles, append);
+      // Use TIME LAYERS mode for news.xyz (default site)
+      const site = document.documentElement.dataset.site || 'xyz';
+      const mode = (site === 'xyz' && !append) ? 'time-layers' : 'default';
+      Renderer.render(els.articles, data.articles, append, mode);
       if (!append) injectJsonLd(data.articles);
       // Show banner ad below articles (first load only)
       if (!append && typeof Ads !== 'undefined') {

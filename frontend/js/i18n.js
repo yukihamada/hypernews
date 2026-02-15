@@ -17,6 +17,8 @@ const I18n = (() => {
     'loading_more':     { en: 'Loading', ja: '読み込み中' },
     'no_articles':      { en: 'No articles found', ja: '記事が見つかりません' },
     'skip_to_articles': { en: 'Skip to articles', ja: '記事へスキップ' },
+    'top_10':           { en: 'TOP 10', ja: 'トップ10' },
+    'archive':          { en: 'ARCHIVE', ja: 'アーカイブ' },
 
     // Time
     'time.just_now':    { en: 'just now', ja: 'たった今' },

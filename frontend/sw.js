@@ -69,6 +69,7 @@ const STATIC_ASSETS = [
   '/js/feed-player.js?v=36',
   '/js/feed-voice.js?v=36',
   '/css/feed-murmur.css?v=36',
+  '/css/time-layers.css?v=37',
   '/js/feed-murmur.js?v=36',
   '/css/cloud.css?v=36',
   '/js/cloud.js?v=36',

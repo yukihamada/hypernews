@@ -23,10 +23,14 @@ const Renderer = (() => {
 
   /**
    * Create a single article element.
+   * @param {Object} article - Article data
+   * @param {string} type - 'hero' for Top 10 (large), 'list' for Archive (compact), or 'default' for standard
    */
-  function createArticleEl(article) {
+  function createArticleEl(article, type = 'default') {
     const el = document.createElement('article');
-    el.className = 'article';
+    // Apply appropriate class based on type
+    el.className = type === 'hero' ? 'article article-hero' :
+                   type === 'list' ? 'article article-list' : 'article';
     el.dataset.category = article.category;
     el.dataset.articleId = article.id || '';
     // Data attributes for FeedMurmur
@@ -84,14 +88,21 @@ const Renderer = (() => {
    * @param {HTMLElement} container
    * @param {Array} articles
    * @param {boolean} append - true to append, false to replace
+   * @param {string} mode - 'default' or 'time-layers'
    */
-  function render(container, articles, append = false) {
+  function render(container, articles, append = false, mode = 'default') {
     if (!append) {
       container.innerHTML = '';
     }
 
     if (articles.length === 0 && !append) {
       container.innerHTML = `<div class="loading">${typeof t === 'function' ? t('no_articles') : 'No articles found'}</div>`;
+      return;
+    }
+
+    // TIME LAYERS mode: separate Top 10 (hero) and Archive (list)
+    if (mode === 'time-layers' && !append) {
+      renderTimeLayers(container, articles);
       return;
     }
 
@@ -106,9 +117,61 @@ const Renderer = (() => {
 
     const frag = document.createDocumentFragment();
     for (const article of sortedArticles) {
-      frag.appendChild(createArticleEl(article));
+      const type = mode === 'list' ? 'list' : 'default';
+      frag.appendChild(createArticleEl(article, type));
     }
     container.appendChild(frag);
+  }
+
+  /**
+   * Render articles in TIME LAYERS mode (Top 10 + Archive)
+   * @param {HTMLElement} container
+   * @param {Array} articles
+   */
+  function renderTimeLayers(container, articles) {
+    container.innerHTML = '';
+
+    // Top 10: first 10 articles with images and descriptions
+    const topArticles = articles
+      .filter(a => a.image_url && a.description && a.description.trim().length > 0)
+      .slice(0, 10);
+
+    // Archive: remaining articles
+    const archiveArticles = articles.slice(topArticles.length);
+
+    // Render Top 10 section
+    if (topArticles.length > 0) {
+      const topSection = document.createElement('section');
+      topSection.className = 'top-articles';
+      topSection.innerHTML = `<h2 class="top-articles-header">${typeof t === 'function' ? t('top_10') : 'TOP 10'}</h2>`;
+
+      const topGrid = document.createElement('div');
+      topGrid.className = 'top-articles-grid';
+
+      for (const article of topArticles) {
+        topGrid.appendChild(createArticleEl(article, 'hero'));
+      }
+
+      topSection.appendChild(topGrid);
+      container.appendChild(topSection);
+    }
+
+    // Render Archive section
+    if (archiveArticles.length > 0) {
+      const archiveSection = document.createElement('section');
+      archiveSection.className = 'archive-articles';
+      archiveSection.innerHTML = `<h2 class="archive-articles-header">${typeof t === 'function' ? t('archive') : 'ARCHIVE'}</h2>`;
+
+      const archiveList = document.createElement('div');
+      archiveList.className = 'archive-list';
+
+      for (const article of archiveArticles) {
+        archiveList.appendChild(createArticleEl(article, 'list'));
+      }
+
+      archiveSection.appendChild(archiveList);
+      container.appendChild(archiveSection);
+    }
   }
 
   /**
