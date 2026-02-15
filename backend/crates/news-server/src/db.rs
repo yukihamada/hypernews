@@ -33,12 +33,18 @@ impl Db {
                 published_at TEXT NOT NULL,
                 fetched_at TEXT NOT NULL,
                 group_id TEXT,
-                group_count INTEGER
+                group_count INTEGER,
+                popularity_score REAL DEFAULT 0.0,
+                enrichment_status TEXT DEFAULT 'pending'
             );
             CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
                 ON articles(category, published_at DESC);
             CREATE INDEX IF NOT EXISTS idx_articles_pub
                 ON articles(published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_popularity
+                ON articles(popularity_score DESC, published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_enrichment_status
+                ON articles(enrichment_status);
 
             CREATE TABLE IF NOT EXISTS feeds (
                 feed_id TEXT PRIMARY KEY,
@@ -115,7 +121,22 @@ impl Db {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);",
+            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);
+
+            CREATE TABLE IF NOT EXISTS enrichments (
+                enrichment_id TEXT PRIMARY KEY,
+                article_id TEXT NOT NULL,
+                agent_type TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_enrichments_article
+                ON enrichments(article_id, status);",
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
 
