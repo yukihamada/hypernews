@@ -954,7 +954,7 @@ pub async fn handle_murmur_generate(
         }
     };
 
-    // Generate TTS via Qwen-TTS (Japanese voice)
+    // Generate TTS via Qwen-TTS (Japanese voice) or fallback to OpenAI TTS
     let audio_base64 = if !state.qwen_tts_endpoint_id.is_empty() && !state.runpod_api_key.is_empty() {
         let input = serde_json::json!({
             "text": murmur_text,
@@ -975,6 +975,18 @@ pub async fn handle_murmur_generate(
             }
             Err(_) => {
                 warn!("Murmur TTS timed out");
+                String::new()
+            }
+        }
+    } else if !state.openai_api_key.is_empty() {
+        // Fallback to OpenAI TTS with Japanese voice
+        match tts_openai(&state, &murmur_text, "nova").await {
+            Ok(audio_bytes) => {
+                use base64::{Engine as _, engine::general_purpose};
+                general_purpose::STANDARD.encode(audio_bytes)
+            }
+            Err(e) => {
+                warn!(error = %e, "OpenAI TTS failed for murmur");
                 String::new()
             }
         }
