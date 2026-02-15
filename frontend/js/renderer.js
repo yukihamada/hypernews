@@ -106,13 +106,19 @@ const Renderer = (() => {
       return;
     }
 
-    // Sort articles: ones with description first
+    // Sort articles: prioritize ones with image and/or description
     const sortedArticles = [...articles].sort((a, b) => {
       const aHasDesc = a.description && a.description.trim().length > 0;
       const bHasDesc = b.description && b.description.trim().length > 0;
-      if (aHasDesc && !bHasDesc) return -1;
-      if (!aHasDesc && bHasDesc) return 1;
-      return 0; // Keep original order for same type
+      const aHasImg = a.image_url && a.image_url.trim().length > 0;
+      const bHasImg = b.image_url && b.image_url.trim().length > 0;
+
+      // Calculate quality score: 2 points for both, 1 point for either
+      const aScore = (aHasDesc && aHasImg ? 2 : (aHasDesc || aHasImg ? 1 : 0));
+      const bScore = (bHasDesc && bHasImg ? 2 : (bHasDesc || bHasImg ? 1 : 0));
+
+      if (aScore !== bScore) return bScore - aScore; // Higher score first
+      return 0; // Keep original order for same score
     });
 
     const frag = document.createDocumentFragment();
