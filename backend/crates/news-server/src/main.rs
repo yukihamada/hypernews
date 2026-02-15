@@ -1,4 +1,6 @@
 mod agents;
+mod analyzer;
+mod chatweb;
 mod claude;
 mod db;
 mod degradation_agent;
@@ -141,6 +143,9 @@ async fn main() {
 
     // Spawn degradation agent background task
     tokio::spawn(degradation_agent::run(Arc::clone(&state)));
+
+    // Spawn AI analyzer background task (ChatWeb.ai)
+    tokio::spawn(analyzer::run(Arc::clone(&state)));
 
     let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
     let api_routes = Router::new()

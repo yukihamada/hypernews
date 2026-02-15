@@ -38,7 +38,13 @@ impl Db {
                 click_count INTEGER NOT NULL DEFAULT 0,
                 enrichment_status TEXT,
                 enriched_at TEXT,
-                popularity_score REAL NOT NULL DEFAULT 0.0
+                popularity_score REAL NOT NULL DEFAULT 0.0,
+                ai_summary TEXT,
+                ai_keywords TEXT,
+                ai_sentiment TEXT,
+                ai_importance REAL,
+                ai_category TEXT,
+                analyzed_at TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
                 ON articles(category, published_at DESC);
@@ -142,6 +148,27 @@ impl Db {
                 ON enrichments(article_id, status);",
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
+
+        // Migration: Add AI analysis columns if they don't exist
+        let column_check: Result<i64, _> = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('articles') WHERE name='ai_summary'",
+            [],
+            |row| row.get(0),
+        );
+
+        if let Ok(0) = column_check {
+            info!("Running migration: Adding AI analysis columns to articles table");
+            conn.execute_batch(
+                "ALTER TABLE articles ADD COLUMN ai_summary TEXT;
+                 ALTER TABLE articles ADD COLUMN ai_keywords TEXT;
+                 ALTER TABLE articles ADD COLUMN ai_sentiment TEXT;
+                 ALTER TABLE articles ADD COLUMN ai_importance REAL;
+                 ALTER TABLE articles ADD COLUMN ai_category TEXT;
+                 ALTER TABLE articles ADD COLUMN analyzed_at TEXT;"
+            )
+            .map_err(|e| format!("Migration failed: {e}"))?;
+            info!("Migration complete: AI analysis columns added");
+        }
 
         info!(path, "SQLite database opened");
         Ok(Self {
@@ -1375,6 +1402,93 @@ impl Db {
         .collect();
 
         Ok(articles)
+    }
+
+    // --- AI Analysis ---
+
+    /// Get articles that need AI analysis (not yet analyzed)
+    pub fn get_articles_for_analysis(&self, limit: i64) -> Result<Vec<Article>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category, title, url, description, image_url, source,
+                        published_at, fetched_at, group_id, group_count
+                 FROM articles
+                 WHERE analyzed_at IS NULL
+                   AND description IS NOT NULL
+                   AND length(description) > 10
+                 ORDER BY published_at DESC
+                 LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let articles = stmt
+            .query_map(params![limit], row_to_article)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(articles)
+    }
+
+    /// Update article with AI analysis results
+    pub fn update_article_analysis(
+        &self,
+        article_id: &str,
+        summary: &str,
+        keywords: &[String],
+        sentiment: &str,
+        importance: f32,
+        category: &str,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let keywords_json = serde_json::to_string(keywords)
+            .map_err(|e| format!("Failed to serialize keywords: {}", e))?;
+
+        let now = chrono::Utc::now().to_rfc3339();
+
+        conn.execute(
+            "UPDATE articles
+             SET ai_summary = ?1,
+                 ai_keywords = ?2,
+                 ai_sentiment = ?3,
+                 ai_importance = ?4,
+                 ai_category = ?5,
+                 analyzed_at = ?6
+             WHERE id = ?7",
+            params![
+                summary,
+                keywords_json,
+                sentiment,
+                importance,
+                category,
+                now,
+                article_id
+            ],
+        )
+        .map_err(|e| format!("Failed to update analysis: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Get analysis statistics
+    pub fn get_analysis_stats(&self) -> Result<(i64, i64), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM articles", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let analyzed: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM articles WHERE analyzed_at IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        Ok((total, analyzed))
     }
 }
 
