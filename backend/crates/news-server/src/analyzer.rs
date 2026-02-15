@@ -65,14 +65,14 @@ pub async fn run(state: Arc<AppState>) {
             MAX_CONCURRENT_ANALYSES
         );
 
-        // Prepare article data for parallel analysis
+        // Prepare article data for parallel analysis (owned strings to avoid lifetime issues)
         let article_data: Vec<_> = articles
             .iter()
             .map(|a| {
                 (
-                    a.title.as_str(),
-                    a.description.as_deref().unwrap_or(""),
-                    a.url.as_str(),
+                    a.title.clone(),
+                    a.description.clone().unwrap_or_default(),
+                    a.url.clone(),
                 )
             })
             .collect();

@@ -8,32 +8,30 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-const CHATWEB_API_URL: &str = "https://chatweb.ai/api/v1";
+const CHATWEB_API_URL: &str = "https://api.chatweb.ai/api/v1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+// Default session ID for unauthenticated requests
+const DEFAULT_SESSION_ID: &str = "cw_efe126a5c6884ac6ba7bcd9e1ef74b22";
+
 #[derive(Debug, Serialize)]
-struct ChatExploreRequest {
+struct ChatRequest {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatExploreResponse {
-    #[serde(default)]
-    responses: Vec<ModelResponse>,
-    #[serde(default)]
-    error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ModelResponse {
-    model: String,
+struct ChatResponse {
     response: String,
     #[serde(default)]
-    tokens: u32,
+    model: String,
     #[serde(default)]
-    latency_ms: u64,
+    credits_used: i64,
+    #[serde(default)]
+    credits_remaining: i64,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 /// Article analysis result from ChatWeb.ai
@@ -64,7 +62,7 @@ impl ChatWebClient {
         }
     }
 
-    /// Analyze an article using ChatWeb.ai's explore mode (parallel multi-model)
+    /// Analyze an article using ChatWeb.ai
     pub async fn analyze_article(
         &self,
         title: &str,
@@ -98,14 +96,14 @@ Return ONLY the JSON object, no additional text."#,
             title, description, url
         );
 
-        let request = ChatExploreRequest {
+        let request = ChatRequest {
             message: prompt,
-            session_id: None,
+            session_id: Some(DEFAULT_SESSION_ID.to_string()),
         };
 
         let response = self
             .client
-            .post(format!("{}/chat/explore", self.api_url))
+            .post(format!("{}/chat", self.api_url))
             .json(&request)
             .send()
             .await
@@ -115,7 +113,7 @@ Return ONLY the JSON object, no additional text."#,
             return Err(format!("ChatWeb API error: {}", response.status()));
         }
 
-        let data: ChatExploreResponse = response
+        let data: ChatResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse ChatWeb response: {}", e))?;
@@ -124,20 +122,12 @@ Return ONLY the JSON object, no additional text."#,
             return Err(format!("ChatWeb API error: {}", error));
         }
 
-        // Find the best response (prefer claude models, then by latency)
-        let best_response = data
-            .responses
-            .iter()
-            .filter(|r| !r.response.is_empty())
-            .min_by_key(|r| {
-                let is_claude = r.model.contains("claude");
-                let penalty = if is_claude { 0 } else { 10000 };
-                penalty + r.latency_ms
-            })
-            .ok_or("No valid responses from ChatWeb API")?;
+        if data.response.is_empty() {
+            return Err("Empty response from ChatWeb API".to_string());
+        }
 
         // Parse JSON from response
-        let analysis = self.parse_analysis(&best_response.response)?;
+        let analysis = self.parse_analysis(&data.response)?;
 
         Ok(analysis)
     }
@@ -192,14 +182,19 @@ Return ONLY the JSON object, no additional text."#,
     /// Analyze multiple articles in parallel
     pub async fn analyze_articles_parallel(
         &self,
-        articles: Vec<(&str, &str, &str)>, // (title, description, url)
+        articles: Vec<(String, String, String)>, // (title, description, url)
         max_concurrent: usize,
     ) -> Vec<Result<ArticleAnalysis, String>> {
         use futures::stream::{self, StreamExt};
 
         stream::iter(articles)
-            .map(|(title, desc, url)| async move {
-                self.analyze_article(title, desc, url).await
+            .map(|(title, desc, url)| {
+                let title = title.clone();
+                let desc = desc.clone();
+                let url = url.clone();
+                async move {
+                    self.analyze_article(&title, &desc, &url).await
+                }
             })
             .buffer_unordered(max_concurrent)
             .collect::<Vec<_>>()
