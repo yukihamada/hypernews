@@ -140,6 +140,21 @@ impl Db {
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
 
+        // Migration: Add popularity_score and enrichment_status columns if they don't exist
+        let column_check: Result<i64, _> = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('articles') WHERE name='popularity_score'",
+            [],
+            |row| row.get(0),
+        );
+        if let Ok(0) = column_check {
+            conn.execute_batch(
+                "ALTER TABLE articles ADD COLUMN popularity_score REAL DEFAULT 0.0;
+                 ALTER TABLE articles ADD COLUMN enrichment_status TEXT DEFAULT 'pending';",
+            )
+            .map_err(|e| format!("Migration error: {e}"))?;
+            info!("Migrated articles table: added popularity_score and enrichment_status columns");
+        }
+
         info!(path, "SQLite database opened");
         Ok(Self {
             conn: Mutex::new(conn),
