@@ -21,6 +21,7 @@ impl Db {
         )
         .map_err(|e| format!("SQLite pragma: {e}"))?;
 
+        // Create tables first (without indexes that reference columns that might not exist yet)
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS articles (
                 id TEXT PRIMARY KEY,
@@ -33,18 +34,8 @@ impl Db {
                 published_at TEXT NOT NULL,
                 fetched_at TEXT NOT NULL,
                 group_id TEXT,
-                group_count INTEGER,
-                popularity_score REAL DEFAULT 0.0,
-                enrichment_status TEXT DEFAULT 'pending'
+                group_count INTEGER
             );
-            CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
-                ON articles(category, published_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_articles_pub
-                ON articles(published_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_articles_popularity
-                ON articles(popularity_score DESC, published_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_articles_enrichment_status
-                ON articles(enrichment_status);
 
             CREATE TABLE IF NOT EXISTS feeds (
                 feed_id TEXT PRIMARY KEY,
@@ -86,10 +77,6 @@ impl Db {
                 current_period_end TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_subs_stripe_sub_id
-                ON subscriptions(stripe_subscription_id);
-            CREATE INDEX IF NOT EXISTS idx_subs_stripe_cust_id
-                ON subscriptions(stripe_customer_id);
 
             CREATE TABLE IF NOT EXISTS usage_limits (
                 device_id TEXT NOT NULL,
@@ -106,8 +93,6 @@ impl Db {
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_ai_cache_expires
-                ON ai_cache(expires_at);
 
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -121,7 +106,6 @@ impl Db {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_users_auth_token ON users(auth_token);
 
             CREATE TABLE IF NOT EXISTS enrichments (
                 enrichment_id TEXT PRIMARY KEY,
@@ -134,9 +118,7 @@ impl Db {
                 created_at TEXT NOT NULL,
                 completed_at TEXT,
                 FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_enrichments_article
-                ON enrichments(article_id, status);",
+            );",
         )
         .map_err(|e| format!("SQLite schema: {e}"))?;
 
@@ -154,6 +136,30 @@ impl Db {
             .map_err(|e| format!("Migration error: {e}"))?;
             info!("Migrated articles table: added popularity_score and enrichment_status columns");
         }
+
+        // Create indexes AFTER migration
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_articles_cat_pub
+                ON articles(category, published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_pub
+                ON articles(published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_popularity
+                ON articles(popularity_score DESC, published_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_articles_enrichment_status
+                ON articles(enrichment_status);
+
+            CREATE INDEX IF NOT EXISTS idx_subs_stripe_sub_id
+                ON subscriptions(stripe_subscription_id);
+            CREATE INDEX IF NOT EXISTS idx_subs_stripe_cust_id
+                ON subscriptions(stripe_customer_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_cache_expires
+                ON ai_cache(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_users_auth_token
+                ON users(auth_token);
+            CREATE INDEX IF NOT EXISTS idx_enrichments_article
+                ON enrichments(article_id, status);",
+        )
+        .map_err(|e| format!("SQLite indexes: {e}"))?;
 
         info!(path, "SQLite database opened");
         Ok(Self {
