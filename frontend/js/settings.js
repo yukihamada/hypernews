@@ -89,7 +89,7 @@
   }
 
   function initBtnGroup(groupId, key, opts) {
-    const val = String(Storage.get(key) ?? (opts && opts.default) || '');
+    const val = String(Storage.get(key) ?? ((opts && opts.default) || ''));
     setActive(groupId, val);
     const el = document.getElementById(groupId);
     if (!el) return;
@@ -360,6 +360,9 @@
 
     initBtnGroup('typewriter-btns', 'typewriterSpeed', { label: 'Typewriter', int: true });
     loadVoicePicker();
+
+    // Murmur toggle
+    initToggle('toggle-murmur', 'feed_murmur');
 
     // EcoSystem Cache Rate
     initSlider('cache-rate-range', 'cache-rate-val', 'ecoCacheRate', '%', v => Math.round(v));

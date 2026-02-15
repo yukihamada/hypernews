@@ -79,14 +79,35 @@
   border-color: rgba(255,255,255,0.3);
 }
 
-/* Articles */
+/* Articles - Neon grid cards */
 [data-theme="neon"] .articles {
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
 }
 [data-theme="neon"] .article {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  padding: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+[data-theme="neon"] .article-img-wrap {
+  width: 100%;
+  height: 0;
+  padding-bottom: 56.25%;
+  border-radius: 0;
+}
+[data-theme="neon"] .article-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+[data-theme="neon"] .article-body {
   padding: 0.75rem 1rem;
 }
 [data-theme="neon"] .article:hover {

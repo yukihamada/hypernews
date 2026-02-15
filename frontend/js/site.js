@@ -10,10 +10,10 @@ const Site = (() => {
   const config = {
     xyz: {
       name: 'news.xyz',
-      title: 'news.xyz - AI-Powered News',
-      description: 'Smart news with AI-generated summaries, Q&A, and voice reading. The fastest AI news aggregator.',
+      title: 'news.xyz \u2014 AI News, Blazing Fast | Built in Rust',
+      description: 'The $56,000 domain running the fastest AI news aggregator. 146+ feeds, AI summaries, voice news, 8 themes. Rust-powered. Ad-free.',
       url: 'https://news.xyz/',
-      image: 'https://news.xyz/icons/icon-512.png',
+      image: 'https://news.xyz/icons/og-xyz.png',
       manifest: 'manifest.json',
       themeColor: '#1a1a2e',
     },
@@ -37,10 +37,10 @@ const Site = (() => {
     },
     cloud: {
       name: 'news.cloud',
-      title: 'news.cloud - News API Platform',
-      description: 'Developer-friendly news aggregation API. AI summaries, article search, podcast generation, and MCP support.',
+      title: 'news.cloud \u2014 News API Platform for Developers',
+      description: 'The engine behind news.xyz. Developer-friendly News API with AI summaries, podcast generation, and MCP support.',
       url: 'https://news.cloud/',
-      image: 'https://news.cloud/icons/icon-512.png',
+      image: 'https://news.cloud/icons/og-cloud.png',
       manifest: 'manifest-cloud.json',
       themeColor: '#0f172a',
     },

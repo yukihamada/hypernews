@@ -7,6 +7,15 @@ const Api = (() => {
   // Base URL: empty for same-origin, set for remote API
   const BASE = '';
 
+  // Request deduplication: prevent duplicate concurrent GET requests
+  const inflight = new Map();
+  function dedup(key, fn) {
+    if (inflight.has(key)) return inflight.get(key);
+    const p = fn().finally(() => inflight.delete(key));
+    inflight.set(key, p);
+    return p;
+  }
+
   /** fetch with AbortController timeout (default 30s) */
   function fetchWithTimeout(url, opts = {}, timeoutMs = 30000) {
     const controller = new AbortController();
@@ -26,15 +35,20 @@ const Api = (() => {
     if (cursor) params.set('cursor', cursor);
 
     const url = `${BASE}/api/articles?${params}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+    return dedup(url, async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    });
   }
 
   async function fetchCategories() {
-    const res = await fetch(`${BASE}/api/categories`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+    const url = `${BASE}/api/categories`;
+    return dedup(url, async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    });
   }
 
   async function sendCommand(command) {

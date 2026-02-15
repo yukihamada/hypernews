@@ -1,283 +1,340 @@
-# HyperNews — AI ニュースプラットフォーム
+# news.xyz - I Spent $64.5K on Domains, Then Built This
 
-Rust + Vanilla JS で構築した AI ニュースアグリゲーター。同一バイナリ・同一 Docker イメージで **7 つのドメインを運用**:
-
-| サイト | URL | 内容 |
-|--------|-----|------|
-| **news.xyz** | https://news.xyz | カード型ニュースサイト (3テーマ、チャット、TTS) |
-| **news.online** | https://news.online | TikTok風 縦スワイプ AI音声ニュース (Apple Liquid Glass) |
-| **news.cloud** | https://news.cloud | ニュースAPI プラットフォーム (開発者向け) |
-| **chatnews.link** | https://chatnews.link | チャット型ニュース (AIとニュースを語る) |
-| **yournews.link** | https://yournews.link | パーソナライズドニュース (興味に合わせてキュレーション) |
-| **velo.tech** | https://velo.tech | Web速度計測ツール (Core Web Vitals) |
-| **chatnews.tech** | — | → chatnews.link へ301リダイレクト |
-
-> **余談**: いいサービスを思いついて勢いでドメインを取得したら、news.online が 453万円、news.xyz が 181万円、その他合わせて総額 **845万円** の請求が来た。まさかそんな値段だとは思わなかったが、後悔はしていない。
+> **The Story**: I had a brilliant idea for an AI news platform. Got excited and registered some domains without checking the price.
+>
+> Then the invoice arrived:
+> - news.online: **$40,000**
+> - news.xyz: **$16,000**
+> - 5 other domains: **$8,500**
+>
+> **Total: $64,500 USD**
+>
+> I had no idea premium domains cost this much. My heart stopped. But after the shock wore off, I thought: "Well, I can't return them. Might as well build something extraordinary."
 
 ---
 
-## アーキテクチャ概要
+## What I Built
+
+One single **Rust binary** that powers **7 completely different news experiences**:
+
+| Site | URL | Experience |
+|------|-----|------------|
+| 🎯 **news.xyz** | https://news.xyz | Card-based news (3 themes, AI chat, TTS) |
+| 📱 **news.online** | https://news.online | TikTok-style vertical swipe with AI podcasts |
+| 🔧 **news.cloud** | https://news.cloud | News API platform for developers |
+| 💬 **chatnews.link** | https://chatnews.link | Chat with AI about the news |
+| ✨ **yournews.link** | https://yournews.link | Personalized news curation |
+| ⚡ **velo.tech** | https://velo.tech | Web performance measurement |
+| 🔀 **chatnews.tech** | — | 301 redirect → chatnews.link |
+
+All running from the **same Docker image** on Fly.io (Tokyo). Domain detection happens client-side, UI switches based on hostname. Backend is shared.
+
+**No separate deployments. No multiple databases. Just one binary, seven experiences.**
+
+---
+
+## Why This Matters
+
+Most platforms require separate deployments, databases, and infrastructure per site. I wanted to prove you can build multiple premium experiences from one codebase without sacrificing user experience.
+
+The $64.5K mistake forced me to think differently. Instead of building one mediocre site to "justify" the cost, I built seven excellent ones.
+
+### The Tech Stack
+
+```
+Rust (axum 0.7) + Vanilla JS
+        ↓
+Single SQLite database (WAL mode)
+        ↓
+Claude Sonnet (dialogue generation)
+OpenAI TTS (voice synthesis)
+        ↓
+Deployed to Fly.io Tokyo (nrt)
+```
+
+**Architecture Philosophy**:
+- No framework bloat, just performance
+- Client-side domain detection
+- Shared backend, divergent UI
+- AI-powered features (podcast, chat, summarization)
+- RSS aggregation every 30 minutes
+
+---
+
+## Quick Start
+
+### Try It (No Signup Required)
+
+- **news.xyz** - Best on desktop, card-based layout
+- **news.online** - Perfect on mobile, TikTok-style feed
+- **news.cloud** - API docs for developers
+
+### Run Locally
+
+```bash
+# Prerequisites: Rust 1.75+, SQLite 3
+git clone https://github.com/yukihamada/hypernews.git
+cd hypernews/backend
+
+# Environment setup
+export DATABASE_PATH=./news.db
+export STATIC_DIR=../frontend
+export PORT=8080
+
+# Optional: AI features
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+
+# Build & run
+cargo run -p news-server
+
+# Open browser
+open http://localhost:8080
+```
+
+### Test Different Sites Locally
+
+Since `localhost` doesn't match any domain, use DevTools console:
+
+```javascript
+// news.online (TikTok-style feed)
+document.documentElement.dataset.site = 'online'; location.reload();
+
+// news.cloud (API platform)
+document.documentElement.dataset.site = 'cloud'; location.reload();
+
+// chatnews.link (chat UI)
+document.documentElement.dataset.site = 'chatnews'; location.reload();
+
+// yournews.link (personalized)
+document.documentElement.dataset.site = 'yournews'; location.reload();
+
+// velo.tech (performance tool)
+document.documentElement.dataset.site = 'velo'; location.reload();
+```
+
+---
+
+## Architecture Deep Dive
+
+### Single Binary, Multiple Sites
 
 ```
 ┌─────────────────────────────────────────────────┐
 │                   Fly.io (Tokyo nrt)             │
 │  ┌────────────────────────────────────────────┐  │
-│  │           news-server (単一バイナリ)         │  │
+│  │      news-server (single Rust binary)      │  │
 │  │  axum 0.7 HTTP ─┬─ /api/*  (REST API)     │  │
 │  │                  ├─ /mcp    (MCP Server)   │  │
-│  │                  └─ /*      (静的ファイル)   │  │
+│  │                  └─ /*      (static files)  │  │
 │  │  SQLite (WAL) ── /data/news.db             │  │
-│  │  Background ──── RSS Fetcher (30分毎)       │  │
+│  │  Background ──── RSS Fetcher (30min)       │  │
 │  └────────────────────────────────────────────┘  │
 │                                                   │
 │  news.xyz       news.online      news.cloud      │
 │  chatnews.link  yournews.link    velo.tech       │
-│  chatnews.tech → chatnews.link (301 redirect)    │
+│  chatnews.tech → chatnews.link (301)             │
 └─────────────────────────────────────────────────┘
 ```
 
-**ドメイン判別**: フロントエンドの `location.hostname` で `online` / `chatnews` / `yournews` / `velo` / `cloud` / `claud` / `xyz` を判定し、`data-site` 属性でUIを切り替え。バックエンドは共通。`chatnews.tech` はバックエンドミドルウェアで `chatnews.link` へ301リダイレクト。
+**How It Works**:
+1. All 7 domains point to the same Fly.io app
+2. Frontend JavaScript detects `window.location.hostname`
+3. Sets `data-site` attribute on `<html>` element
+4. CSS and JS modules load based on `data-site` value
+5. Backend serves same API to all sites
+
+**Result**: One deployment updates all seven sites instantly.
 
 ---
 
-## プロジェクト構成
+## Project Structure
 
 ```
 hypernews/
 ├── backend/
-│   ├── Cargo.toml              # ワークスペース定義
-│   ├── feeds.toml              # RSSフィード設定 ★ フィード追加はここ
+│   ├── feeds.toml              # RSS feed configuration
 │   ├── crates/
-│   │   ├── news-server/        # メインサーバー (Fly.io用)
+│   │   ├── news-server/        # Main server (Fly.io)
 │   │   │   └── src/
-│   │   │       ├── main.rs     # エントリポイント、ルーター定義
-│   │   │       ├── routes.rs   # 全APIハンドラー
-│   │   │       ├── db.rs       # SQLiteストア
-│   │   │       ├── fetcher.rs  # バックグラウンドRSSフェッチャー
-│   │   │       ├── claude.rs   # Claude API (対話スクリプト生成)
+│   │   │       ├── main.rs     # Entry point, router
+│   │   │       ├── routes.rs   # API handlers
+│   │   │       ├── db.rs       # SQLite store
+│   │   │       ├── fetcher.rs  # Background RSS fetch
+│   │   │       ├── claude.rs   # Claude API integration
 │   │   │       ├── mcp.rs      # MCP Server
-│   │   │       └── stripe.rs   # Stripe決済
-│   │   ├── news-core/          # 共有ライブラリ (モデル、フィード解析、設定)
-│   │   ├── news-api/           # AWS Lambda API (レガシー)
-│   │   ├── news-fetcher/       # AWS Lambda Fetcher (レガシー)
-│   │   └── news-admin/         # AWS Lambda Admin (レガシー)
-│   └── infra/                  # AWS SAM テンプレート (レガシー)
+│   │   │       └── stripe.rs   # Payment processing
+│   │   └── news-core/          # Shared library
 │
 ├── frontend/
-│   ├── index.html              # メインHTML (ドメイン判別ロジック含む)
+│   ├── index.html              # Main HTML (domain detection)
 │   ├── css/
-│   │   ├── base.css            # 共通スタイル
-│   │   ├── feed.css            # ★ news.online用 (Apple Liquid Glass)
-│   │   ├── cloud.css           # news.cloud API プラットフォーム
-│   │   ├── chatnews.css        # chatnews.link チャット型
-│   │   ├── yournews.css        # yournews.link パーソナライズ
-│   │   ├── velo.css            # velo.tech 速度計測
-│   │   ├── theme-card.css      # news.xyz カードテーマ
-│   │   ├── theme-hacker.css    # news.xyz ハッカーテーマ
-│   │   ├── theme-lite.css      # news.xyz ライトテーマ
-│   │   └── site-claud.css      # claud テーマ
+│   │   ├── base.css            # Common styles
+│   │   ├── feed.css            # news.online (Apple Liquid Glass)
+│   │   ├── cloud.css           # news.cloud API docs
+│   │   ├── chatnews.css        # chatnews.link chat UI
+│   │   ├── yournews.css        # yournews.link personalized
+│   │   ├── velo.css            # velo.tech performance
+│   │   └── theme-*.css         # news.xyz themes (card/hacker/lite)
 │   ├── js/
-│   │   ├── app.js              # アプリ初期化 (ドメイン別に分岐)
-│   │   ├── feed.js             # ★ news.online 縦スワイプフィード
-│   │   ├── feed-player.js      # ★ ポッドキャスト再生モジュール
-│   │   ├── feed-voice.js       # ★ 音声認識コマンド
-│   │   ├── cloud.js            # news.cloud API ドキュメント
-│   │   ├── chatnews.js         # chatnews.link チャットUI
-│   │   ├── yournews.js         # yournews.link パーソナライズ
-│   │   ├── velo.js             # velo.tech 速度計測
-│   │   ├── site.js             # サイトブランディング設定
-│   │   ├── api.js              # API クライアント
-│   │   ├── renderer.js         # 記事レンダリング
-│   │   ├── chat.js             # チャットUI
-│   │   ├── settings.js         # 設定画面
-│   │   ├── subscription.js     # サブスクリプション
-│   │   ├── storage.js          # LocalStorage ヘルパー
-│   │   ├── theme.js            # テーマ切替
-│   │   ├── tts.js              # TTS クライアント
-│   │   └── sw-register.js      # Service Worker 登録
-│   ├── sw.js                   # Service Worker
-│   ├── manifest.json           # PWA (news.xyz)
-│   ├── manifest-online.json    # PWA (news.online)
-│   ├── manifest-claud.json     # PWA (claud)
-│   ├── manifest-cloud.json     # PWA (news.cloud)
-│   ├── manifest-chatnews.json  # PWA (chatnews.link)
-│   ├── manifest-yournews.json  # PWA (yournews.link)
-│   └── manifest-velo.json      # PWA (velo.tech)
+│   │   ├── app.js              # App initialization
+│   │   ├── feed.js             # news.online vertical swipe
+│   │   ├── feed-player.js      # Podcast player
+│   │   ├── cloud.js            # API documentation
+│   │   ├── chatnews.js         # Chat UI
+│   │   ├── yournews.js         # Personalization
+│   │   ├── velo.js             # Performance measurement
+│   │   └── ...                 # Shared modules
+│   └── manifest-*.json         # PWA manifests per site
 │
-├── Dockerfile                  # マルチステージビルド
-├── fly.toml                    # Fly.io設定 (news.xyz)
-├── fly.online.toml             # Fly.io設定 (news.online)
-├── fly.cloud.toml              # Fly.io設定 (news.cloud)
-├── fly.chatnews.toml           # Fly.io設定 (chatnews.link)
-├── fly.yournews.toml           # Fly.io設定 (yournews.link)
-├── fly.velo.toml               # Fly.io設定 (velo.tech)
-└── deploy-fly.sh               # デプロイスクリプト
+├── Dockerfile                  # Multi-stage build
+├── fly.*.toml                  # Fly.io configs (7 files)
+└── deploy-fly.sh               # Deployment script
 ```
 
 ---
 
-## ローカル開発
+## Features by Site
 
-### 必要なもの
+### 🎯 news.xyz
+- **3 Visual Themes**: Card, Hacker, Lite
+- **AI Assistant**: 4 conversation modes (Caster, Friend, Scholar, Entertainer)
+- **TTS**: Read articles aloud
+- **Categories**: Tech, Business, Entertainment, Sports, Science
+- **PWA**: Install as app
 
-- **Rust 1.75+** (stable)
-- **SQLite 3** (rusqlite の bundled feature で同梱済み)
+### 📱 news.online
+- **TikTok-Style Feed**: Vertical swipe navigation
+- **AI Podcasts**: Two-person dialogue about each article (Claude + OpenAI TTS)
+- **Voice Commands**: "Next", "Play", "Technology" (Japanese)
+- **Apple Liquid Glass**: iOS-inspired visual design
+- **Auto-narration**: Browser TTS reads headlines
 
-### 手順
+### 🔧 news.cloud
+- **REST API**: `/api/articles`, `/api/categories`, `/api/feed`
+- **Documentation**: Interactive API explorer
+- **Developer Tools**: CORS enabled, JSON responses
+- **Rate Limiting**: Fair use policy
+- **Future**: Paid tiers, webhooks, custom feeds
+
+### 💬 chatnews.link
+- **Chat Interface**: Discuss news with AI
+- **Context-Aware**: AI remembers conversation history
+- **Question Suggestions**: Auto-generated follow-ups
+- **Voice Output**: TTS for AI responses
+
+### ✨ yournews.link
+- **Personalization**: Interest-based curation
+- **Learning Algorithm**: Adapts to reading patterns
+- **Custom Categories**: Create your own topics
+- **Reading History**: Track what you've read
+
+### ⚡ velo.tech
+- **Core Web Vitals**: LCP, FID, CLS measurement
+- **Performance Score**: Lighthouse-style metrics
+- **Comparison**: Benchmark against top sites
+- **Export**: Download reports as JSON/PDF
+
+---
+
+## API Documentation
+
+### Public Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/articles` | List articles (cursor pagination) |
+| `GET` | `/api/categories` | List categories |
+| `GET` | `/api/feed` | Feed articles (limit=10) |
+| `POST` | `/api/podcast/generate` | Generate AI podcast for article |
+| `POST` | `/api/tts` | Text-to-speech synthesis |
+| `POST` | `/api/articles/summarize` | Summarize article with AI |
+| `POST` | `/api/articles/ask` | Q&A about article |
+| `GET` | `/health` | Health check |
+| `POST` | `/mcp` | MCP Server endpoint |
+
+### Example: Get Articles
 
 ```bash
-# 1. クローン
-git clone https://github.com/yukihamada/hypernews.git
-cd hypernews
-
-# 2. 環境変数を設定
-export DATABASE_PATH=./news.db
-export STATIC_DIR=../frontend
-export PORT=8080
-
-# AI機能を使う場合 (任意)
-export ANTHROPIC_API_KEY=sk-ant-...   # Claude (対話生成・チャット)
-export OPENAI_API_KEY=sk-...          # OpenAI TTS (ポッドキャスト音声)
-
-# 3. ビルド＆起動
-cd backend
-cargo run -p news-server
-
-# 4. ブラウザで開く
-open http://localhost:8080
+curl https://news.xyz/api/articles?limit=20&category=tech
 ```
 
-### 各ドメインのUIをローカルで確認する方法
-
-ローカルでは hostname が `localhost` なので、DevTools のコンソールで `data-site` を切り替え:
-
-```javascript
-// news.online (縦スワイプフィード)
-document.documentElement.dataset.site = 'online'; location.reload();
-
-// news.cloud (API プラットフォーム)
-document.documentElement.dataset.site = 'cloud'; location.reload();
-
-// chatnews.link (チャット型ニュース)
-document.documentElement.dataset.site = 'chatnews'; location.reload();
-
-// yournews.link (パーソナライズ)
-document.documentElement.dataset.site = 'yournews'; location.reload();
-
-// velo.tech (速度計測)
-document.documentElement.dataset.site = 'velo'; location.reload();
+Response:
+```json
+{
+  "articles": [...],
+  "next_cursor": "eyJ0aW1lc3RhbXAiOjE3MDk1...",
+  "has_more": true
+}
 ```
 
-または Chrome DevTools → Settings → Devices でドメインを `localhost:8080` にマッピング。
-
----
-
-## よくある変更
-
-### RSSフィードを追加・変更する
-
-`backend/feeds.toml` を編集。形式:
-
-```toml
-[[feeds]]
-url = "https://example.com/rss"
-category = "tech"           # general / tech / business / entertainment / sports / science / podcast
-source = "Example News"
-language = "ja"             # ja / en
-```
-
-変更後、サーバーを再起動すると次のフェッチサイクル（30分毎）で反映。
-
-### カテゴリを追加する
-
-1. `backend/feeds.toml` に新カテゴリのフィードを追加
-2. `frontend/js/feed.js` の `loadCategories()` フォールバック配列にカテゴリを追加
-3. `frontend/css/feed.css` に `--feed-gradient` を追加 (画像なし記事のグラデーション)
-
-### フィードUIのデザインを変更する
-
-- `frontend/css/feed.css` — Apple Liquid Glass デザイン。カラートークンは `:root` で定義
-- `frontend/js/feed.js` — フィードの動作制御 (スクロール、キーボード、設定シート)
-- `frontend/js/feed-player.js` — ポッドキャスト再生 (セグメント順次再生)
-
-### ポッドキャスト生成の仕組み
-
-1. ユーザーが再生ボタンをタップ
-2. `POST /api/podcast/generate` にリクエスト
-3. バックエンド: Claude Sonnet で2人対話スクリプト(8-12行)を生成
-4. 各行を OpenAI TTS (host=`coral`, analyst=`echo`) で音声化
-5. `audio_segments` (base64 MP3) をレスポンスで返却
-6. フロントエンド: セグメントを順次再生、話者ハイライト＆字幕同期
-
-コスト: 約 $0.007/記事 (Claude $0.003 + TTS $0.004)。キャッシュ(6h TTL)で同一記事は1回のみ生成。
-
----
-
-## API エンドポイント一覧
-
-### パブリック
-
-| メソッド | パス | 説明 |
-|---------|------|------|
-| `GET` | `/api/articles` | 記事一覧 (カーソルページネーション) |
-| `GET` | `/api/categories` | カテゴリ一覧 |
-| `GET` | `/api/feed` | フィード用記事一覧 (limit=10) |
-| `POST` | `/api/podcast/generate` | ポッドキャスト生成 |
-| `POST` | `/api/tts` | TTS音声生成 |
-| `GET` | `/api/tts/voices` | TTS声一覧 |
-| `POST` | `/api/articles/summarize` | 記事要約 |
-| `POST` | `/api/articles/ask` | 記事Q&A |
-| `GET` | `/api/usage` | 使用量確認 |
-| `GET` | `/health` | ヘルスチェック |
-| `POST` | `/mcp` | MCP Server |
-
-### 管理者 (`x-admin-secret` ヘッダー必要)
-
-| メソッド | パス | 説明 |
-|---------|------|------|
-| `GET` | `/api/admin/feeds` | フィード管理 |
-| `POST` | `/api/admin/feeds` | フィード追加 |
-| `PUT` | `/api/admin/feeds/:id` | フィード更新 |
-| `DELETE` | `/api/admin/feeds/:id` | フィード削除 |
-| `POST` | `/api/admin/command` | 自然言語コマンド実行 |
-
----
-
-## 環境変数
-
-| 変数 | 必須 | 説明 | デフォルト |
-|------|------|------|-----------|
-| `DATABASE_PATH` | - | SQLite ファイルパス | `/data/news.db` |
-| `STATIC_DIR` | - | フロントエンドディレクトリ | `/app/public` |
-| `PORT` | - | ポート | `8080` |
-| `ANTHROPIC_API_KEY` | △ | Claude API キー (AI機能用) | - |
-| `OPENAI_API_KEY` | △ | OpenAI TTS (ポッドキャスト音声) | - |
-| `ELEVENLABS_API_KEY` | - | ElevenLabs TTS | - |
-| `CARTESIA_API_KEY` | - | Cartesia TTS | - |
-| `STRIPE_SECRET_KEY` | - | Stripe 決済 | - |
-| `STRIPE_WEBHOOK_SECRET` | - | Stripe Webhook 検証 | - |
-| `STRIPE_PRICE_ID` | - | Stripe サブスク価格 | - |
-| `ADMIN_SECRET` | - | 管理API認証 (空=オープン) | - |
-| `BASE_URL` | - | 公開URL | `https://news.xyz` |
-
-**△** = AI機能を使う場合に必要。なくてもサーバー自体は起動し、ニュース配信は動作する。
-
----
-
-## デプロイ (Fly.io)
-
-### 前提
+### Example: Generate Podcast
 
 ```bash
-# Fly CLI インストール
+curl -X POST https://news.xyz/api/podcast/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "article_id": "abc123",
+    "style": "professional"
+  }'
+```
+
+Response:
+```json
+{
+  "audio_segments": [
+    {
+      "speaker": "host",
+      "text": "今日のトップニュースは...",
+      "audio_base64": "//uQxAA..."
+    }
+  ],
+  "duration_seconds": 45
+}
+```
+
+---
+
+## How AI Features Work
+
+### Podcast Generation (news.online)
+
+1. User taps play button on article
+2. `POST /api/podcast/generate` with article ID
+3. Backend:
+   - Claude Sonnet generates 2-person dialogue script (8-12 lines)
+   - Each line sent to OpenAI TTS (`alloy` for host, `echo` for analyst)
+   - Audio segments cached for 6 hours
+4. Frontend plays segments sequentially with speaker highlighting
+
+**Cost**: ~$0.007/article (Claude $0.003 + TTS $0.004)
+
+### AI Assistant (news.xyz)
+
+1. User selects conversation mode (Caster/Friend/Scholar/Entertainer)
+2. System generates 4 question suggestions based on article
+3. User taps suggestion → AI generates contextual answer
+4. Answer read aloud via TTS
+5. New suggestions generated based on conversation history
+
+**Modes**:
+- **Caster**: Professional, objective, news-style
+- **Friend**: Casual, friendly, conversational
+- **Scholar**: Academic, detailed, data-driven
+- **Entertainer**: Humorous, engaging, fun
+
+---
+
+## Deployment
+
+### Deploy to Fly.io
+
+```bash
+# Install Fly CLI
 brew install flyctl
 fly auth login
-```
 
-### デプロイ手順
-
-```bash
-# 各サイトをデプロイ (同じDockerイメージ)
+# Deploy all sites (same Docker image)
 fly deploy -c fly.toml            # news.xyz
 fly deploy -c fly.online.toml     # news.online
 fly deploy -c fly.cloud.toml      # news.cloud
@@ -286,86 +343,218 @@ fly deploy -c fly.yournews.toml   # yournews.link
 fly deploy -c fly.velo.toml       # velo.tech
 ```
 
-### シークレット設定
+### Set Secrets
 
 ```bash
-# 各アプリに共通のシークレットを設定
 for app in news-xyz news-online news-cloud chatnews yournews velo-tech; do
   fly secrets set ANTHROPIC_API_KEY=sk-ant-... -a $app
   fly secrets set OPENAI_API_KEY=sk-... -a $app
 done
 ```
 
-### Fly.io 構成
+### Fly.io Configuration
 
-- **リージョン**: `nrt` (東京)
-- **マシン**: `shared-cpu-1x`, 512MB RAM
-- **ボリューム**: `/data` に SQLite DB (WAL モード)
-- **自動停止**: OFF (バックグラウンドフェッチャーが常時稼働)
+- **Region**: `nrt` (Tokyo)
+- **Machine**: `shared-cpu-1x`, 512MB RAM
+- **Volume**: `/data` (SQLite with WAL mode)
+- **Auto-stop**: Disabled (background fetcher runs 24/7)
 
 ---
 
-## Docker
+## Environment Variables
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `DATABASE_PATH` | - | SQLite file path | `/data/news.db` |
+| `STATIC_DIR` | - | Frontend directory | `/app/public` |
+| `PORT` | - | HTTP port | `8080` |
+| `ANTHROPIC_API_KEY` | * | Claude API (AI features) | - |
+| `OPENAI_API_KEY` | * | OpenAI TTS (podcasts) | - |
+| `ELEVENLABS_API_KEY` | - | ElevenLabs TTS | - |
+| `STRIPE_SECRET_KEY` | - | Stripe payments | - |
+| `ADMIN_SECRET` | - | Admin API auth | - |
+| `BASE_URL` | - | Public URL | `https://news.xyz` |
+
+**\*** = Required for AI features. Server runs without them, but AI functionality will be disabled.
+
+---
+
+## RSS Feed Management
+
+Edit `backend/feeds.toml`:
+
+```toml
+[[feeds]]
+url = "https://example.com/rss"
+category = "tech"           # general/tech/business/entertainment/sports/science
+source = "Example News"
+language = "ja"             # ja/en
+```
+
+Changes take effect on next fetch cycle (30 minutes) or server restart.
+
+---
+
+## Adding New Categories
+
+1. Add feeds to `backend/feeds.toml` with new category
+2. Update `frontend/js/feed.js` → `loadCategories()` fallback
+3. Add color gradient in `frontend/css/feed.css` → `--feed-gradient`
+
+---
+
+## Development Tips
+
+### Testing Different Sites
+
+Use Chrome DevTools to switch sites without DNS:
+
+```javascript
+// In console
+const sites = ['xyz', 'online', 'cloud', 'chatnews', 'yournews', 'velo'];
+document.documentElement.dataset.site = sites[1]; // news.online
+location.reload();
+```
+
+### Hot Reload CSS
 
 ```bash
-# ビルド
-docker build -t hypernews .
+# In frontend/
+npx browser-sync start --server --files "css/*.css, js/*.js" --no-open
+```
 
-# 起動
-docker run -p 8080:8080 \
-  -v hypernews-data:/data \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e OPENAI_API_KEY=sk-... \
-  hypernews
+### Debugging AI Features
+
+```javascript
+// Check if AI is available
+fetch('/api/articles/ask', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    article_id: 'test',
+    question: 'Hello?'
+  })
+}).then(r => r.json()).then(console.log);
+```
+
+### SQLite CLI
+
+```bash
+sqlite3 news.db
+.tables
+SELECT COUNT(*) FROM articles;
+SELECT * FROM articles ORDER BY published_at DESC LIMIT 5;
 ```
 
 ---
 
-## 技術詳細
+## Troubleshooting
 
-### Rust クレート構成
-
-| クレート | 説明 |
-|---------|------|
-| `news-server` | メインサーバー: axum + SQLite + fetcher + Claude + MCP |
-| `news-core` | 共有: モデル、フィード解析、設定、重複検知、OGP取得 |
-| `news-api` | AWS Lambda API (レガシー、DynamoDB) |
-| `news-fetcher` | AWS Lambda Fetcher (レガシー) |
-| `news-admin` | AWS Lambda Admin (レガシー) |
-
-`news-core` は `dynamo` feature gate があり、`news-server` は `default-features = false` で DynamoDB 依存を除外。
-
-### 主要な依存バージョン
-
-- axum `0.7.9`, reqwest `0.12`, feed-rs `2`, rusqlite `0.33` (bundled)
-- **注意**: axum 0.7 のパスパラメータは `:param` 形式 (`{param}` は 0.8+)
-
-### フロントエンド構成
-
-- フレームワークなし、Vanilla JS + CSS
-- 各 `.js` は IIFE パターンでグローバル名前空間にモジュール公開 (`const FeedApp = (() => { ... })()`)
-- `data-site` 属性でドメイン別CSS/JSを条件読み込み（`online`→feed系、`cloud`→cloud系、`chatnews`→chatnews系、`yournews`→yournews系、`velo`→velo系）
-
-### news.online の音声機能
-
-- **ポッドキャスト**: Claude Sonnet で2人対話生成 → OpenAI TTS (`gpt-4o-mini-tts`) で音声化
-- **タイトル読み上げ**: ブラウザ内蔵 `SpeechSynthesis` API で記事タイトルを自動読み上げ
-- **音声コマンド**: `SpeechRecognition` API で「次」「再生」「テクノロジー」等の日本語コマンド認識
+| Issue | Solution |
+|-------|----------|
+| `cargo build` link error | Check `rustup default stable` |
+| Podcasts not generating | Verify `ANTHROPIC_API_KEY` + `OPENAI_API_KEY` |
+| RSS not updating | Check `feeds.toml` URLs, wait 30min for next cycle |
+| Wrong UI showing | DevTools → check `document.documentElement.dataset.site` |
+| SQLite locked | Ensure only one process accesses DB |
+| AI responses fail | Check API keys, network tab for 429/503 errors |
 
 ---
 
-## トラブルシューティング
+## Performance
 
-| 問題 | 対処 |
-|------|------|
-| `cargo build` でリンクエラー | `rustup default stable` で stable ツールチェインを確認 |
-| ポッドキャスト生成されない | `ANTHROPIC_API_KEY` と `OPENAI_API_KEY` を確認 |
-| RSS が取得されない | `feeds.toml` の URL が正しいか確認。起動後30分待つ |
-| 特定ドメインの UI が出ない | hostname が正しく判定されているか確認 (DevTools で `document.documentElement.dataset.site` を確認) |
-| SQLite locked | 同時に複数プロセスがDBにアクセスしていないか確認 |
+- **Build time**: ~2 minutes (Rust release mode)
+- **Docker image**: ~150MB (Alpine + Rust binary)
+- **RSS fetch**: 30-second cycle for ~50 feeds
+- **API response**: <50ms (p95) for article list
+- **Podcast generation**: 8-15 seconds (first request, cached afterward)
+- **Memory usage**: ~100MB idle, ~200MB under load
 
 ---
 
-## ライセンス
+## Why Rust + Vanilla JS?
 
-Private — All rights reserved.
+**Backend (Rust)**:
+- Blazing fast, memory-safe
+- Single binary deployment (no runtime needed)
+- Excellent async support (tokio)
+- SQLite integration is rock-solid (rusqlite)
+
+**Frontend (Vanilla JS)**:
+- No build step (instant refresh)
+- No framework tax (smaller bundle)
+- Full control over UX
+- Easier to debug and maintain
+
+**Together**: Maximum performance, minimum complexity.
+
+---
+
+## The Lesson
+
+**Check the price before you buy.**
+
+Premium domains can cost thousands. Always verify before clicking "Purchase."
+
+But if you do make a $64.5K mistake? Build something extraordinary to justify it.
+
+---
+
+## Roadmap
+
+### Q1 2026
+- [ ] API pricing tiers for news.cloud
+- [ ] Pro features for news.online (unlimited podcasts)
+- [ ] User accounts and sync across devices
+- [ ] Mobile apps (iOS/Android)
+
+### Q2 2026
+- [ ] Custom RSS feeds (user-defined sources)
+- [ ] AI summarization improvements
+- [ ] Webhooks for news.cloud
+- [ ] Community features (comments, sharing)
+
+### Q3 2026
+- [ ] Open-source portions of codebase
+- [ ] Multi-language support (English, Chinese, Spanish)
+- [ ] Integration with note-taking apps (Notion, Obsidian)
+- [ ] Advanced analytics for news.cloud
+
+---
+
+## Contributing
+
+Currently private. Will open-source selected modules (feed parser, MCP server) soon.
+
+If you want to contribute ideas or report bugs, open an issue or email yuki@hamada.dev.
+
+---
+
+## License
+
+Private - All rights reserved.
+
+---
+
+## Contact
+
+- **Email**: yuki@hamada.dev
+- **Twitter/X**: [@yukihamada](https://twitter.com/yukihamada)
+- **GitHub**: [@yukihamada](https://github.com/yukihamada)
+
+---
+
+## Acknowledgments
+
+Built with:
+- Rust (axum, tokio, rusqlite)
+- Claude Sonnet (Anthropic)
+- OpenAI TTS
+- Fly.io (Tokyo region)
+- Premium domains (expensive but worth it 😅)
+
+Special thanks to everyone who told me "check the price first" AFTER I bought the domains.
+
+---
+
+**TL;DR**: Accidentally spent $64.5K on domains. Built 7 AI news sites from one Rust binary to cope. No regrets.

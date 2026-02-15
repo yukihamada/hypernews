@@ -29,6 +29,11 @@ const Renderer = (() => {
     el.className = 'article';
     el.dataset.category = article.category;
     el.dataset.articleId = article.id || '';
+    // Data attributes for FeedMurmur
+    el.dataset.title = article.title || '';
+    el.dataset.description = stripHtml(article.description) || '';
+    el.dataset.source = article.source || '';
+    el.dataset.url = article.url || '';
 
     const catLabel = article.category || '';
 
@@ -90,8 +95,17 @@ const Renderer = (() => {
       return;
     }
 
+    // Sort articles: ones with description first
+    const sortedArticles = [...articles].sort((a, b) => {
+      const aHasDesc = a.description && a.description.trim().length > 0;
+      const bHasDesc = b.description && b.description.trim().length > 0;
+      if (aHasDesc && !bHasDesc) return -1;
+      if (!aHasDesc && bHasDesc) return 1;
+      return 0; // Keep original order for same type
+    });
+
     const frag = document.createDocumentFragment();
-    for (const article of articles) {
+    for (const article of sortedArticles) {
       frag.appendChild(createArticleEl(article));
     }
     container.appendChild(frag);

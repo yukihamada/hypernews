@@ -81,16 +81,18 @@
   max-width: 860px;
 }
 
-/* Articles — compact list */
+/* Articles — grid terminal layout */
 [data-theme="hacker"] .articles {
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.5rem;
 }
 [data-theme="hacker"] .article {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 0;
-  padding: 0.6rem 0;
+  padding: 0.75rem;
+  flex-direction: column;
 }
 [data-theme="hacker"] .article:hover {
   box-shadow: none;

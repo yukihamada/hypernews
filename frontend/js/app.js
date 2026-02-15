@@ -67,6 +67,7 @@ const App = (() => {
     if (typeof I18n !== 'undefined') I18n.init();
     Theme.apply();
     Tts.init();
+    if (typeof FeedMurmur !== 'undefined') FeedMurmur.init();
     ReadHistory.init();
     Bookmarks.init();
     CloneVoices.init();
@@ -146,8 +147,16 @@ const App = (() => {
               }
             }
           }, delay);
+          // Trigger Murmur when article is visible
+          if (typeof FeedMurmur !== 'undefined') {
+            FeedMurmur.onArticleActivated(el);
+          }
         } else {
           clearTimeout(el._readTimer);
+          // Stop Murmur when article leaves viewport
+          if (typeof FeedMurmur !== 'undefined') {
+            FeedMurmur.onArticleDeactivated(el);
+          }
         }
       }
     }, { threshold: 0.5 });

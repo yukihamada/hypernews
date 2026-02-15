@@ -1,5 +1,8 @@
+mod agents;
 mod claude;
 mod db;
+mod degradation_agent;
+mod enrichment_agent;
 mod fetcher;
 mod mcp;
 mod routes;
@@ -133,6 +136,12 @@ async fn main() {
     // Spawn TTS pre-cache background task
     tokio::spawn(tts_cache::run(Arc::clone(&state)));
 
+    // Spawn enrichment agent background task
+    tokio::spawn(enrichment_agent::run(Arc::clone(&state)));
+
+    // Spawn degradation agent background task
+    tokio::spawn(degradation_agent::run(Arc::clone(&state)));
+
     let index_path = std::path::PathBuf::from(&static_dir).join("index.html");
     let api_routes = Router::new()
         .route("/article/:id", get({
@@ -156,6 +165,9 @@ async fn main() {
         }))
         .route("/api/articles", get(routes::get_articles))
         .route("/api/articles/:id", get(routes::get_article_by_id))
+        .route("/api/articles/:id/view", post(routes::handle_article_view))
+        .route("/api/articles/:id/click", post(routes::handle_article_click))
+        .route("/api/articles/:id/enrichments", get(routes::handle_get_enrichments))
         .route("/api/categories", get(routes::get_categories))
         .route("/api/search", get(routes::handle_search))
         .route("/api/image-proxy", get(routes::handle_image_proxy))
@@ -163,6 +175,8 @@ async fn main() {
         .route("/api/articles/summarize", post(routes::handle_summarize))
         .route("/api/articles/questions", post(routes::handle_article_questions))
         .route("/api/articles/ask", post(routes::handle_article_ask))
+        .route("/api/articles/classify", post(routes::handle_article_classify))
+        .route("/api/articles/action-plan", post(routes::handle_action_plan))
         .route("/api/tts/to-reading", post(routes::handle_to_reading))
         .route("/api/tts/voices", get(routes::handle_tts_voices))
         .route("/api/tts", post(routes::handle_tts))
@@ -221,6 +235,7 @@ async fn main() {
             "https://news.claud".parse::<HeaderValue>().unwrap(),
             "https://news-xyz.fly.dev".parse::<HeaderValue>().unwrap(),
             "https://news-online.fly.dev".parse::<HeaderValue>().unwrap(),
+            "https://news-cloud.fly.dev".parse::<HeaderValue>().unwrap(),
             "http://localhost:8080".parse::<HeaderValue>().unwrap(),
         ]))
         .allow_methods([
@@ -240,6 +255,7 @@ async fn main() {
     let app = api_routes
         .fallback_service(ServeDir::new(&static_dir).append_index_html_on_directories(true))
         .layer(middleware::from_fn(redirect_chatnews_tech))
+        .layer(middleware::from_fn(set_cache_headers))
         .layer(ConcurrencyLimitLayer::new(256))
         .layer(CompressionLayer::new())
         .layer(cors)
@@ -271,6 +287,33 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Server error");
+}
+
+/// Set Cache-Control headers based on URL patterns
+async fn set_cache_headers(req: Request, next: Next) -> impl IntoResponse {
+    let path = req.uri().path().to_owned();
+    let query = req.uri().query().unwrap_or_default().to_owned();
+    let mut res = next.run(req).await;
+    let cache_value = if query.contains("v=") {
+        Some("public, max-age=31536000, immutable")
+    } else if path == "/sw.js" {
+        Some("no-cache")
+    } else if path.ends_with(".html") || path == "/" {
+        Some("no-cache")
+    } else if path.starts_with("/icons/") {
+        Some("public, max-age=604800")
+    } else if path.ends_with(".json") || path == "/robots.txt" || path == "/sitemap.xml" {
+        Some("public, max-age=3600")
+    } else {
+        None
+    };
+    if let Some(val) = cache_value {
+        res.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static(val),
+        );
+    }
+    res
 }
 
 /// Redirect chatnews.tech → chatnews.link (301)
